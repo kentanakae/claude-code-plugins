@@ -1,0 +1,11 @@
+{
+  "name": "example-plugin",
+  "description": "プラグインの構造を示すサンプルプラグイン",
+  "version": "1.0.0",
+  "author": {
+    "name": "KNT (kentanakae)"
+  },
+  "repository": "https://github.com/kentanakae/claude-code-plugins",
+  "license": "MIT",
+  "keywords": ["example", "template"]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "KNT-claude-code-plugins",
+  "owner": {
+    "name": "KNT (kentanakae)"
+  },
+  "metadata": {
+    "description": "KNT (kentanakae) の Claude Code プラグイン集",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "example",
+      "source": "./plugins/example",
+      "description": "プラグインの構造を示すサンプルプラグイン"
+    },
+    {
+      "name": "core",
+      "source": "./plugins/core",
+      "description": "普段使いの基本ツールと設定をまとめたデフォルトプラグイン"
+    }
+  ]
+}
