@@ -1,0 +1,42 @@
+{
+  "description": "通知フック: 確認時とタスク完了時にサウンドとmacOS通知を表示",
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Blow.aiff",
+            "async": true,
+            "statusMessage": "確認音を再生中"
+          },
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Codeが確認を求めています\" with title \"Claude Code\" subtitle \"確認待ち\"' -e 'tell application id \"com.microsoft.VSCode\" to activate'",
+            "async": true,
+            "statusMessage": "確認待ち通知を表示中"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Hero.aiff",
+            "async": true,
+            "statusMessage": "完了音を再生中"
+          },
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Codeがタスクを完了しました\" with title \"Claude Code\" subtitle \"タスク処理終了\"' -e 'tell application id \"com.microsoft.VSCode\" to activate'",
+            "async": true,
+            "statusMessage": "タスク完了通知を表示中"
+          }
+        ]
+      }
+    ]
+  }
+}

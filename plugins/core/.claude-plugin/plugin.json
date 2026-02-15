@@ -1,0 +1,11 @@
+{
+  "name": "core",
+  "description": "普段使いの基本ツールと設定をまとめたデフォルトプラグイン",
+  "version": "1.0.10",
+  "author": {
+    "name": "KNT (kentanakae)"
+  },
+  "repository": "https://github.com/kentanakae/claude-code-plugins",
+  "license": "MIT",
+  "keywords": ["core", "default"]
+}
