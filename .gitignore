@@ -1,1 +1,7 @@
 .DS_Store
+.agents/
+.claude/
+.gemini/
+.codex/
+AGENTS.md
+GEMINI.md
