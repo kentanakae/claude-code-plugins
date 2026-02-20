@@ -18,6 +18,11 @@ var showCost = false
 
 var autocompactBufferSize = 45_000
 
+var showRate = true
+var showRateDetail = false
+var rateBarLength = 5
+var cacheTTL = 60
+
 var showBar = true
 var barLength = 10
 var defaultContextWindowSize = 200_000
@@ -43,6 +48,10 @@ while argIndex < args.count {
     case "--no-cost":      showCost = false
     case "--show-bar":     showBar = true
     case "--no-bar":       showBar = false
+    case "--show-rate":    showRate = true
+    case "--no-rate":      showRate = false
+    case "--rate-detail":    showRateDetail = true
+    case "--no-rate-detail": showRateDetail = false
     // Value flags
     case "--autocompact-buffer-size":
         argIndex += 1
@@ -59,6 +68,12 @@ while argIndex < args.count {
     case "--danger-threshold":
         argIndex += 1
         if argIndex < args.count, let v = Int(args[argIndex]) { dangerThreshold = v }
+    case "--rate-bar-length":
+        argIndex += 1
+        if argIndex < args.count, let v = Int(args[argIndex]) { rateBarLength = v }
+    case "--cache-ttl":
+        argIndex += 1
+        if argIndex < args.count, let v = Int(args[argIndex]) { cacheTTL = v }
     case "--help", "-h":
         let help = """
             Usage: statusline [OPTIONS]
@@ -70,6 +85,8 @@ while argIndex < args.count {
               --show-usage / --no-usage         Show token usage (default: off)
               --show-cost / --no-cost           Show session cost (default: off)
               --show-bar / --no-bar             Show context bar (default: on)
+              --show-rate / --no-rate           Show rate limit (default: on)
+              --rate-detail / --no-rate-detail   Show per-model rate details (default: off)
 
             Options (value):
               --autocompact-buffer-size <n>     Autocompact buffer size (default: 45000)
@@ -77,6 +94,8 @@ while argIndex < args.count {
               --context-window-size <n>         Default context window size (default: 200000)
               --warning-threshold <n>           Warning threshold percent (default: 50)
               --danger-threshold <n>            Danger threshold percent (default: 80)
+              --rate-bar-length <n>            Rate limit bar length (default: 5)
+              --cache-ttl <n>                  Cache TTL in seconds (default: 60)
             """
         print(help)
         exit(0)
@@ -94,6 +113,107 @@ let green = "\u{001B}[32m"
 let yellow = "\u{001B}[33m"
 let red = "\u{001B}[31m"
 let purple = "\u{001B}[95m"
+let gray = "\u{001B}[90m"
+
+// MARK: - Rate Limit Structs
+
+struct RateLimitEntry: Decodable {
+    let utilization: Double?
+    let resetsAt: String?
+}
+
+struct ExtraUsage: Decodable {
+    let isEnabled: Bool?
+    let monthlyLimit: Double?
+    let usedCredits: Double?
+    let utilization: Double?
+}
+
+struct UsageResponse: Decodable {
+    let fiveHour: RateLimitEntry?
+    let sevenDay: RateLimitEntry?
+    let sevenDayOauthApps: RateLimitEntry?
+    let sevenDayOpus: RateLimitEntry?
+    let sevenDaySonnet: RateLimitEntry?
+    let sevenDayCowork: RateLimitEntry?
+    let extraUsage: ExtraUsage?
+}
+
+// MARK: - Rate Limit Functions
+
+func getAccessToken() -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+    process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    try? process.run()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return nil }
+
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    guard let jsonString = String(data: data, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+        !jsonString.isEmpty else { return nil }
+
+    guard let jsonData = jsonString.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+          let oauth = root["claudeAiOauth"] as? [String: Any],
+          let token = oauth["accessToken"] as? String else { return nil }
+    return token
+}
+
+func fetchRateLimit(cacheTTL: Int) -> UsageResponse? {
+    let cacheFile = "/tmp/claude-rate-limit-cache.json"
+    let fm = FileManager.default
+
+    // Check cache
+    if let attrs = try? fm.attributesOfItem(atPath: cacheFile),
+       let modDate = attrs[.modificationDate] as? Date,
+       Date().timeIntervalSince(modDate) < Double(cacheTTL),
+       let cacheData = fm.contents(atPath: cacheFile) {
+        let dec = JSONDecoder()
+        dec.keyDecodingStrategy = .convertFromSnakeCase
+        if let cached = try? dec.decode(UsageResponse.self, from: cacheData) {
+            return cached
+        }
+    }
+
+    // Fetch from API
+    guard let token = getAccessToken(),
+          let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return nil }
+
+    var request = URLRequest(url: url, timeoutInterval: 5)
+    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: UsageResponse?
+    var responseData: Data?
+
+    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        defer { semaphore.signal() }
+        guard error == nil, let data = data,
+              let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else { return }
+        responseData = data
+        let dec = JSONDecoder()
+        dec.keyDecodingStrategy = .convertFromSnakeCase
+        result = try? dec.decode(UsageResponse.self, from: data)
+    }
+    task.resume()
+    _ = semaphore.wait(timeout: .now() + 6)
+
+    // Write cache
+    if let data = responseData {
+        fm.createFile(atPath: cacheFile, contents: data)
+    }
+
+    return result
+}
+
+// MARK: - Data Structs
 
 struct Model: Decodable {
     let displayName: String?
@@ -317,6 +437,43 @@ if showBar {
         + reset
 
     parts.append("\(bar) \(barColor)\(percent)%\(reset)")
+}
+
+// MARK: - Rate Limit Display
+if showRate {
+    if let usage = fetchRateLimit(cacheTTL: cacheTTL) {
+        var entries: [(String, RateLimitEntry?)] = [("5h", usage.fiveHour), ("7d", usage.sevenDay)]
+        if showRateDetail {
+            let detailEntries: [(String, RateLimitEntry?)] = [
+                ("7d-son", usage.sevenDaySonnet),
+                ("7d-opus", usage.sevenDayOpus),
+                ("7d-oauth", usage.sevenDayOauthApps),
+                ("7d-cowk", usage.sevenDayCowork),
+            ]
+            entries.append(contentsOf: detailEntries)
+        }
+        var rateParts: [String] = []
+        for (label, entry) in entries {
+            if let util = entry?.utilization {
+                let clampedUtil = min(max(util / 100.0, 0), 1.0)
+                let pct = Int(clampedUtil * 100)
+                let filledCount = min(Int(round(Double(rateBarLength) * clampedUtil)), rateBarLength)
+                let emptyCount = rateBarLength - filledCount
+                let bar = String(repeating: "█", count: filledCount)
+                    + String(repeating: "░", count: emptyCount)
+                let color: String
+                switch pct {
+                case 0..<warningThreshold: color = green
+                case warningThreshold..<dangerThreshold: color = yellow
+                default: color = red
+                }
+                rateParts.append("\(color)\(label):\(bar) \(pct)%\(reset)")
+            } else if !showRateDetail {
+                rateParts.append("\(gray)\(label):-%\(reset)")
+            }
+        }
+        parts.append(rateParts.joined(separator: " | "))
+    }
 }
 
 if showUsage, let used = usageTokens {
