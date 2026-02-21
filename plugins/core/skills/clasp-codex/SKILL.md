@@ -61,8 +61,14 @@ codex exec -s read-only "<prompt>"
 書き込みが必要な場合:
 
 ```bash
-codex exec "<prompt>"
+codex exec -s workspace-write "<prompt>"
 ```
+
+> **注意**: `workspace-write` サンドボックスでは `.agents/`、`.codex/` 等の隠しディレクトリへの書き込みがブロックされる場合がある。これらのディレクトリへの書き込みが必要な場合は `--add-dir` で追加する:
+>
+> ```bash
+> codex exec -s workspace-write --add-dir .agents --add-dir .codex "<prompt>"
+> ```
 
 ### Step 4: 結果を報告
 
@@ -74,6 +80,7 @@ codex exec "<prompt>"
 | ----------- | ------ |
 | `-m, --model <MODEL>` | 使用するモデル |
 | `-s, --sandbox <MODE>` | サンドボックスポリシー（read-only, workspace-write, danger-full-access） |
+| `--add-dir <DIR>` | 追加の書き込み許可ディレクトリ（workspace-write時に隠しディレクトリ等へ書き込む場合） |
 | `-C, --cd <DIR>` | 作業ディレクトリを指定 |
 | `--full-auto` | 低フリクションで自動実行 |
 
@@ -86,6 +93,9 @@ codex review
 # 読み取り専用で分析
 codex exec -s read-only "このコードベースの構造を分析して"
 
-# タスクを実行
-codex exec "このコードのパフォーマンスを改善して"
+# タスクを実行（書き込み付き）
+codex exec -s workspace-write "このコードのパフォーマンスを改善して"
+
+# 隠しディレクトリへの書き込みも許可
+codex exec -s workspace-write --add-dir .agents --add-dir .codex "ルールファイルを修正して"
 ```
