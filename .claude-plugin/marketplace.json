@@ -17,6 +17,11 @@
       "name": "core",
       "source": "./plugins/core",
       "description": "普段使いの基本ツールと設定をまとめたデフォルトプラグイン"
+    },
+    {
+      "name": "apple-app-dev",
+      "source": "./plugins/apple-app-dev",
+      "description": "Apple プラットフォーム（iOS / macOS / watchOS / visionOS）向けの開発支援プラグイン"
     }
   ]
 }

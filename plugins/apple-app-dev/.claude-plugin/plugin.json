@@ -1,0 +1,11 @@
+{
+  "name": "apple-app-dev",
+  "description": "Apple プラットフォーム（iOS / macOS / watchOS / visionOS）向けの開発支援プラグイン",
+  "version": "1.0.0",
+  "author": {
+    "name": "KNT (kentanakae)"
+  },
+  "repository": "https://github.com/kentanakae/claude-code-plugins",
+  "license": "MIT",
+  "keywords": ["apple", "ios", "macos", "watchos", "visionos", "swift", "xcode"]
+}
