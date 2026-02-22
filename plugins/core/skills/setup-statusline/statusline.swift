@@ -164,6 +164,26 @@ func getAccessToken() -> String? {
     return token
 }
 
+func formatResetTime(_ isoString: String) -> String? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    guard let date = formatter.date(from: isoString)
+        ?? ISO8601DateFormatter().date(from: isoString) else { return nil }
+
+    let calendar = Calendar.current
+    let displayFormatter = DateFormatter()
+    displayFormatter.locale = Locale.current
+
+    if calendar.isDateInToday(date) {
+        displayFormatter.dateFormat = "H:mm"
+    } else {
+        displayFormatter.dateFormat = "M/d"
+    }
+
+    return displayFormatter.string(from: date)
+}
+
 func fetchRateLimit(cacheTTL: Int) -> UsageResponse? {
     let cacheFile = "/tmp/claude-rate-limit-cache.json"
     let fm = FileManager.default
@@ -467,7 +487,13 @@ if showRate {
                 case warningThreshold..<dangerThreshold: color = yellow
                 default: color = red
                 }
-                rateParts.append("\(color)\(label):\(bar) \(pct)%\(reset)")
+                let resetPrefix: String
+                if let resetStr = entry?.resetsAt, let formatted = formatResetTime(resetStr) {
+                    resetPrefix = "\(label)⏱️\(formatted)"
+                } else {
+                    resetPrefix = label
+                }
+                rateParts.append("\(color)\(resetPrefix):\(bar) \(pct)%\(reset)")
             } else if !showRateDetail {
                 rateParts.append("\(gray)\(label):-%\(reset)")
             }
