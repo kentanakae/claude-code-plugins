@@ -1,7 +1,7 @@
 {
   "name": "core",
   "description": "普段使いの基本ツールと設定をまとめたデフォルトプラグイン",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "author": {
     "name": "KNT (kentanakae)"
   },
