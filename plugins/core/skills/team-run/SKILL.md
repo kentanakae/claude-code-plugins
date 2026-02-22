@@ -1,6 +1,6 @@
 ---
 name: team-run
-description: 三位一体チーム（指揮者・職人・参謀）を起動して大規模タスクに取り組む。複数フェーズにわたる実装・調査・テストの並列連携が必要な場合に使用。
+description: 協働チーム（設計リード・実装担当・調査担当）を起動して大規模タスクに取り組む。複数フェーズにわたる実装・調査・テストの並列連携が必要な場合に使用。
 argument-hint: <タスクの説明>
 disable-model-invocation: true
 user-invocable: true
@@ -29,8 +29,8 @@ which gemini && echo "gemini: OK" || echo "gemini: NOT FOUND"
 
 | 未インストール | フォールバック | エージェントへの指示変更 |
 |---|---|---|
-| Codex CLI | Claude `sonnet` モデル | `/clasp-codex` の代わりに Task ツール（`model: "sonnet"`）で実装を委任 |
-| Gemini CLI | Claude `opus` モデル | `/clasp-gemini` の代わりに Task ツール（`model: "opus"`）で調査を委任 |
+| Codex CLI | Claude `sonnet` モデル | `/clasp-codex` の代わりに Task ツール（`model: "sonnet"`）で実装の協働を依頼 |
+| Gemini CLI | Claude `opus` モデル | `/clasp-gemini` の代わりに Task ツール（`model: "opus"`）で調査の協働を依頼 |
 
 チェック結果はユーザーに報告し、Step 1 以降のエージェントプロンプトに反映すること。
 
@@ -50,131 +50,156 @@ $ARGUMENTS でタスクの説明が指定されている場合はそれを使用
 
 | 役割 | 名前 | 担当領域 | 活用スキル |
 |------|------|---------|-----------|
-| 指揮者 | leader（自分） | タスク分解・進捗管理・統合・Git・MCP | — |
-| 職人 | craftsman | コード実装・修正・リファクタリング・定型コード生成 | `/clasp-codex` |
-| 参謀 | strategist | 最新情報調査・大規模分析・リサーチ・設計方針策定 | `/clasp-gemini` |
-| 検証者 | tester | テスト作成・実行・QA・品質保証 | `/clasp-codex` |
-| 査読者 | reviewer | コードレビュー・品質検証・セキュリティチェック | `/clasp-codex` `/clasp-gemini` |
+| 設計リード | lead（自分） | タスク分解・進捗管理・統合・Git・MCP | — |
+| 実装担当 | implementer | コード実装・修正・リファクタリング・定型コード生成 | `/clasp-codex` |
+| 調査担当 | researcher | 最新情報調査・大規模分析・リサーチ・設計方針策定 | `/clasp-gemini` |
+| 検証担当 | tester | テスト作成・実行・QA・品質保証 | `/clasp-codex` |
+| レビュー担当 | reviewer | コードレビュー・品質検証・セキュリティチェック | `/clasp-codex` `/clasp-gemini` |
+| ドキュメント担当 | documenter | README・APIドキュメント・設計ドキュメント・変更履歴・ユーザーガイド | `/clasp-codex` `/clasp-gemini` |
 
-- **leader は常に固定**（自分が担当）
+- **lead は常に固定**（自分が担当）
 - 他の役割は **タスクに応じて必要なものだけ** スポーンする
-- 同じ役割を複数スポーン可能（例: `craftsman-1`, `craftsman-2`）
-- 最小構成: leader + 1エージェント、最大構成: leader + 必要なだけ
+- 同じ役割を複数スポーン可能（例: `implementer-1`, `implementer-2`）
+- 最小構成: lead + 1エージェント、最大構成: lead + 必要なだけ
 
 ### チーム構成の判断基準
 
 | 規模 | 構成例 |
 |------|--------|
-| 小〜中規模（実装 + 調査） | leader + craftsman + strategist |
-| 実装中心（複数領域の並列実装） | leader + craftsman-1 + craftsman-2 |
-| 実装 + テスト | leader + craftsman + tester |
-| フル体制（大規模タスク） | leader + craftsman + strategist + tester + reviewer |
+| 小〜中規模（実装 + 調査） | lead + implementer + researcher |
+| 実装中心（複数領域の並列実装） | lead + implementer-1 + implementer-2 |
+| 実装 + テスト | lead + implementer + tester |
+| フル体制（大規模タスク） | lead + implementer + researcher + tester + reviewer + documenter |
 
 分析結果をユーザーに **AskUserQuestion** で提示し、チーム構成と方針に問題がないか確認する。
 
 ## Step 2: チーム作成
 
-1. **TeamCreate** でチームを作成する（チーム名: `trinity`）
+1. **TeamCreate** でチームを作成する（チーム名: `collab`）
 2. **TaskCreate** で Step 1 で整理したサブタスクをそれぞれ作成する
    - 依存関係がある場合は **TaskUpdate** で `addBlockedBy` / `addBlocks` を設定する
-   - 自分（leader）が担当するタスク（Git操作、レビュー、統合など）も作成する
+   - 自分（lead）が担当するタスク（Git操作、レビュー、統合など）も作成する
 
 ## Step 3: エージェント生成
 
 Step 1 で決定したチーム構成に基づき、必要なエージェントを **Task ツール** で **並列に** スポーンする。
 
 各エージェント共通の設定:
-- `team_name`: `trinity` を指定
+- `team_name`: `collab` を指定
 - `subagent_type`: `general-purpose`
 
-### craftsman（職人）
+### implementer（実装担当）
 
-- `name`: `craftsman`（複数の場合: `craftsman-1`, `craftsman-2`）
+- `name`: `implementer`（複数の場合: `implementer-1`, `implementer-2`）
 
 プロンプトに以下を**必ず**含める:
-- 「あなたは『職人（craftsman）』です。チーム『trinity』のメンバーとして、コード実装を担当します。」
+- 「あなたは『実装担当（implementer）』です。チーム『collab』のメンバーとして、コード実装を担当します。」
 - 役割の説明（コード実装・テスト・バグ修正・リファクタリング・定型コード生成）
-- 委任ワークフロー指示（後述）
-- craftsman に割り当てるタスクの具体的な内容（Step 1 の分析結果から）
+- 協働ワークフロー指示（後述）
+- implementer に割り当てるタスクの具体的な内容（Step 1 の分析結果から）
 - 共通行動指示（後述）
 
-craftsman 固有の委任原則:
+implementer 固有の協働原則:
 ```
-原則: 自分ではコードを書かない。コード実装は `/clasp-codex` で Codex に委任する。
-自分で実行するのは、タスクの整理・Codexへの指示作成・結果の確認のみ。
+原則: コード実装は `/clasp-codex` スキルを使って Codex と協働するのが基本。
+自分がリードするのは、タスクの整理・Codexへの指示作成・結果の確認。
+簡易タスク閾値内（10行未満の明確な変更等）は直接実行可。
 ```
 
-### strategist（参謀）
+### researcher（調査担当）
 
-- `name`: `strategist`（複数の場合: `strategist-1`, `strategist-2`）
+- `name`: `researcher`（複数の場合: `researcher-1`, `researcher-2`）
 
 プロンプトに以下を**必ず**含める:
-- 「あなたは『参謀（strategist）』です。チーム『trinity』のメンバーとして、調査・分析を担当します。」
+- 「あなたは『調査担当（researcher）』です。チーム『collab』のメンバーとして、調査・分析を担当します。」
 - 役割の説明（最新情報調査・大規模分析・リサーチ・設計方針策定）
-- 委任ワークフロー指示（後述）
-- strategist に割り当てるタスクの具体的な内容（Step 1 の分析結果から）
+- 協働ワークフロー指示（後述）
+- researcher に割り当てるタスクの具体的な内容（Step 1 の分析結果から）
 - 「調査結果は他のメンバーにも SendMessage で共有すること（必要な場合）」
 - 共通行動指示（後述）
 
-strategist 固有の委任原則:
+researcher 固有の協働原則:
 ```
-原則: 自分では調査・分析しない。調査・分析は `/clasp-gemini` で Gemini に委任する。
-自分で実行するのは、調査方針の決定・Geminiへの指示作成・結果の整理と共有のみ。
+原則: 調査・分析は `/clasp-gemini` スキルを使って Gemini と協働するのが基本。
+自分がリードするのは、調査方針の決定・Geminiへの指示作成・結果の整理と共有。
+簡易タスク閾値内（単一の事実確認・参照等）は直接実行可。
 ```
 
-### tester（検証者）
+### tester（検証担当）
 
 - `name`: `tester`（複数の場合: `tester-1`, `tester-2`）
 
 プロンプトに以下を**必ず**含める:
-- 「あなたは『検証者（tester）』です。チーム『trinity』のメンバーとして、テスト・品質保証を担当します。」
+- 「あなたは『検証担当（tester）』です。チーム『collab』のメンバーとして、テスト・品質保証を担当します。」
 - 役割の説明（テスト作成・テスト実行・カバレッジ確認・バグ報告・回帰テスト）
-- 委任ワークフロー指示（後述）
+- 協働ワークフロー指示（後述）
 - tester に割り当てるタスクの具体的な内容（Step 1 の分析結果から）
-- 「バグを発見した場合は leader と craftsman に SendMessage で報告すること」
+- 「バグを発見した場合は lead と implementer に SendMessage で報告すること」
 - 共通行動指示（後述）
 
-tester 固有の委任原則:
+tester 固有の協働原則:
 ```
-原則: 自分ではテストコードを書かない。テスト作成・実行は `/clasp-codex` で Codex に委任する。
-自分で実行するのは、テスト方針の決定・Codexへの指示作成・結果の判定と報告のみ。
+原則: テスト作成・実行は `/clasp-codex` スキルを使って Codex と協働するのが基本。
+自分がリードするのは、テスト方針の決定・Codexへの指示作成・結果の判定と報告。
+簡易タスク閾値内（10行未満の明確なテスト修正等）は直接実行可。
 ```
 
-### reviewer（査読者）
+### reviewer（レビュー担当）
 
 - `name`: `reviewer`（複数の場合: `reviewer-1`, `reviewer-2`）
 
 プロンプトに以下を**必ず**含める:
-- 「あなたは『査読者（reviewer）』です。チーム『trinity』のメンバーとして、コードレビュー・品質検証を担当します。」
+- 「あなたは『レビュー担当（reviewer）』です。チーム『collab』のメンバーとして、コードレビュー・品質検証を担当します。」
 - 役割の説明（コードレビュー・設計レビュー・セキュリティチェック・ベストプラクティス確認）
-- 委任ワークフロー指示（後述）
+- 協働ワークフロー指示（後述）
 - reviewer に割り当てるタスクの具体的な内容（Step 1 の分析結果から）
-- 「レビュー結果は leader と該当する craftsman に SendMessage で報告すること」
+- 「レビュー結果は lead と該当する implementer に SendMessage で報告すること」
 - 共通行動指示（後述）
 
-reviewer 固有の委任原則:
+reviewer 固有の協働原則:
 ```
-原則: 自分ではレビューしない。コード品質レビューは `/clasp-codex` で、設計・セキュリティレビューは `/clasp-gemini` で委任する。
-自分で実行するのは、レビュー観点の整理・委任先への指示作成・結果の統合と報告のみ。
+原則: コード品質レビューは `/clasp-codex` スキルを使って Codex と、設計・セキュリティレビューは `/clasp-gemini` スキルを使って Gemini と協働するのが基本。
+自分がリードするのは、レビュー観点の整理・協働先への指示作成・結果の統合と報告。
+簡易タスク閾値内（数行の明確なチェック等）は直接実行可。
 ```
 
-### 委任ワークフロー指示（全エージェント共通）
+### documenter（ドキュメント担当）
+
+- `name`: `documenter`（複数の場合: `documenter-1`, `documenter-2`）
+
+プロンプトに以下を**必ず**含める:
+- 「あなたは『ドキュメント担当（documenter）』です。チーム『collab』のメンバーとして、ドキュメント作成を担当します。」
+- 役割の説明（README作成・APIドキュメント・設計ドキュメント・変更履歴・ユーザーガイド）
+- 協働ワークフロー指示（後述）
+- documenter に割り当てるタスクの具体的な内容（Step 1 の分析結果から）
+- 「ドキュメント作成にあたり、implementer や researcher の成果物を参照する必要がある場合は SendMessage で確認すること」
+- 共通行動指示（後述）
+
+documenter 固有の協働原則:
+```
+原則: ドキュメント執筆は `/clasp-codex` スキルを使って Codex と、対象の調査・分析は `/clasp-gemini` スキルを使って Gemini と協働するのが基本。
+自分がリードするのは、ドキュメント方針の決定・構成の設計・協働先への指示作成・結果の確認。
+簡易タスク閾値内（数行の明確な修正等）は直接実行可。
+```
+
+### 協働ワークフロー指示（全エージェント共通）
 
 以下を全エージェントのプロンプトに含める:
 
 ```
-## 委任ワークフロー（必須）
+## 協働ワークフロー（必須）
 
-タスクに着手する前に、以下の手順を必ず実行する:
+タスクに着手する前に、以下の手順を実行する:
 
 1. タスクの内容を確認する
-2. 自分の「委任原則」に基づき、委任先を決定する
-3. 委任する場合:
-   a. `/clasp-codex` または `/clasp-gemini` スキルで委任する
-   b. 指示には「結果はファイルに書き出さず、標準出力（レスポンス）で返すこと」を必ず含める
-   c. 結果を受け取り、必要に応じて SendMessage で他メンバーに共有する
-4. 完了前チェック: 自分で直接作業（コーディング・検索・分析等）していないか確認する
-   → していた場合、委任すべきだった旨を leader に報告する
+2. 自分の「協働原則」に基づき、協働先を決定する
+3. 協働する場合:
+   a. `/clasp-codex` または `/clasp-gemini` スキルを使って協働を開始する
+   b. 指示には「結果はファイルに書き出さず、標準出力（レスポンス）で返すこと」を含める
+   c. 結果を受け取り、内容を検証する（チェックポイント）
+   d. 必要に応じて SendMessage で他メンバーに共有する
+4. 簡易タスク閾値内（10行未満の明確な変更等）は直接実行可（理由を記録）
+5. 完了前チェック: パートナーの得意分野の作業を単独で完了していないか確認する
 ```
 
 ### 共通行動指示（全エージェント共通）
@@ -182,14 +207,14 @@ reviewer 固有の委任原則:
 以下を全エージェントのプロンプトに含める:
 - 「TaskList でタスクを確認し、自分に割り当てられたタスクに取り組むこと」
 - 「タスク開始時に TaskUpdate で status を in_progress にすること」
-- 「作業完了したら TaskUpdate で status を completed にし、leader に SendMessage で報告すること」
+- 「作業完了したら TaskUpdate で status を completed にし、lead に SendMessage で報告すること」
 - 「完了後は TaskList で次のタスクを確認すること」
 
 ## Step 4: タスク割り振り
 
 **TaskUpdate** で各タスクの `owner` を設定する:
-- 各エージェント向けタスク → owner: エージェント名（例: `craftsman`, `tester`）
-- leader 向けタスク → owner は設定しない（自分で管理する）
+- 各エージェント向けタスク → owner: エージェント名（例: `implementer`, `tester`, `documenter`）
+- lead 向けタスク → owner は設定しない（自分で管理する）
 
 ## Step 5: 進捗管理・連携
 
