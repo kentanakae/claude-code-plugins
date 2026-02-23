@@ -115,7 +115,7 @@ AskUserQuestion（multiSelect: true）で表示項目を選択させる。AskUse
 | レート制限 | --show-rate | --no-rate |
 | レート詳細 | --rate-detail | --no-rate-detail |
 
-全ての項目を未選択の状態で提示する。ユーザーが選択した項目には ON フラグ、選択しなかった項目には OFF フラグを付与する。
+全ての項目を未選択の状態で提示する。ユーザーが選択した項目に ON フラグを、選択しなかった項目に OFF フラグを付与する。
 
 #### レート制限の詳細設定
 
