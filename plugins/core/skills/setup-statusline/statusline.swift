@@ -489,7 +489,7 @@ if showRate {
                 }
                 let resetPrefix: String
                 if let resetStr = entry?.resetsAt, let formatted = formatResetTime(resetStr) {
-                    resetPrefix = "\(label)⏱️\(formatted)"
+                    resetPrefix = "\(label)[\(formatted)]"
                 } else {
                     resetPrefix = label
                 }
