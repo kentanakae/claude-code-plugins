@@ -461,7 +461,9 @@ if showBar {
 
 // MARK: - Rate Limit Display
 if showRate {
-    if let usage = fetchRateLimit(cacheTTL: cacheTTL) {
+    if getAccessToken() == nil {
+        parts.append("\(red)rate: no auth\(reset)")
+    } else if let usage = fetchRateLimit(cacheTTL: cacheTTL) {
         var entries: [(String, RateLimitEntry?)] = [("5h", usage.fiveHour), ("7d", usage.sevenDay)]
         if showRateDetail {
             let detailEntries: [(String, RateLimitEntry?)] = [
@@ -499,6 +501,8 @@ if showRate {
             }
         }
         parts.append(rateParts.joined(separator: " | "))
+    } else {
+        parts.append("\(yellow)rate: fetch error\(reset)")
     }
 }
 
