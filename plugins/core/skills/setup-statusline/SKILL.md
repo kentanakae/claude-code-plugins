@@ -3,7 +3,7 @@ name: setup-statusline
 description: カスタムステータスラインのインストール・アンインストール・設定変更を行う。
 argument-hint: [install|update|uninstall]
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Bash, AskUserQuestion
+allowed-tools: Read, Write, Edit, Bash
 ---
 
 ## Step 0: プランモード解除

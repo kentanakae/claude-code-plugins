@@ -3,7 +3,7 @@ name: edit-output-style
 description: Claude Code output styleの作成・更新を公式仕様に基づいて行う。新しいoutput style作成（create）や既存output styleの更新（update）時に使用。
 argument-hint: [create|update] [style-name]
 disable-model-invocation: true
-allowed-tools: WebFetch, Read, Write, Edit, Glob, AskUserQuestion
+allowed-tools: WebFetch, Read, Write, Edit, Glob
 ---
 
 ## Step 1: サブコマンド判定
