@@ -1,6 +1,25 @@
 {
-  "description": "通知フック: 確認時とタスク完了時にサウンドとmacOS通知を表示",
+  "description": "coreプラグインのフック定義",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Funk.aiff",
+            "async": true,
+            "statusMessage": "スキル発火通知音を再生中"
+          },
+          {
+            "type": "command",
+            "command": "SKILL_NAME=$(cat | jq -r '.tool_input.skill // \"unknown\"'); osascript -e \"display notification \\\"$SKILL_NAME を使用します\\\" with title \\\"Claude Code\\\" subtitle \\\"スキル\\\"\"",
+            "async": true,
+            "statusMessage": "スキル発火通知を表示中"
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "permission_prompt",
