@@ -10,7 +10,9 @@
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "xcodebuildmcp@latest", "mcp"],
-      "env": {}
+      "env": {
+        "SENTRY_DISABLED": "true"
+      }
     }
   }
 }
