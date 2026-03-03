@@ -2,7 +2,7 @@
 name: edit-skill
 description: Claude Codeスキルの作成・更新を公式仕様に基づいて行う。新しいスキル作成（create）や既存スキルの更新（update）時に使用。
 argument-hint: [create|update] [skill-name]
-allowed-tools: WebFetch, Read, Write, Edit, Glob, AskUserQuestion
+allowed-tools: WebFetch, Read, Write, Edit, Glob
 ---
 
 ## Step 1: サブコマンド判定
@@ -171,6 +171,13 @@ AskUserQuestion（multiSelect: true）で更新したい箇所を選択させる
    - 大幅な書き換え → Write で全体更新
    - サポートファイル → Write / Edit で個別に更新
 4. 更新結果を表示
+
+## フロントマター記述ルール
+
+**クオート（引用符）は使用しない。** フロントマターはYAML風の記法だが、YAMLパーサーではない。値にダブルクォート（`"`）やシングルクォート（`'`）を付けてはいけない。コロン、カンマ、特殊文字を含む値であっても、クオートなしでそのまま記述すること。
+
+- OK: `description: コードを図解と比喩で説明する。コードの仕組みの質問時に使用。`
+- NG: `description: "コードを図解と比喩で説明する。コードの仕組みの質問時に使用。"`
 
 ## フロントマターリファレンス
 

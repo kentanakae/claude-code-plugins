@@ -1,6 +1,6 @@
 ---
 name: chatwork-api
-description: "Chatwork API リファレンス。チャットワークのrooms, messages, tasks, files, members, contacts, invitationsの認証・エンドポイント・パラメータ仕様を提供。"
+description: Chatwork API リファレンス。チャットワークのrooms, messages, tasks, files, members, contacts, invitationsの認証・エンドポイント・パラメータ仕様を提供。
 user-invocable: false
 ---
 

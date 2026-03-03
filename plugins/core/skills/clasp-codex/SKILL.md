@@ -1,6 +1,6 @@
 ---
 name: clasp-codex
-description: "Codex CLIで別AIの視点を得る。コードレビューやタスク実行をCodexに依頼する際に使用。multi-agent collaboration。"
+description: Codex CLIで別AIの視点を得る。コードレビューやタスク実行をCodexに依頼する際に使用。multi-agent collaboration。
 allowed-tools: Bash(codex:*), Bash(which:*)
 argument-hint: [review|exec] [prompt]
 context: fork

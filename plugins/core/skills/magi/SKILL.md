@@ -1,7 +1,7 @@
 ---
 name: magi
 description: エヴァンゲリオンのMAGIシステムを模した3AI合議による意思決定。設計判断、コードレビュー、方針決定など重要な判断が必要な場面で使用。magi, 合議, 判断, レビュー, 意思決定。
-argument-hint: "[議題]"
+argument-hint: [議題]
 disable-model-invocation: true
 allowed-tools: Task, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 ---
