@@ -32,7 +32,7 @@
           },
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Claude Codeが確認を求めています\" with title \"Claude Code\" subtitle \"確認待ち\"' -e 'tell application id \"com.microsoft.VSCode\" to activate'",
+            "command": "osascript -e 'display notification \"Claude Codeが確認を求めています\" with title \"Claude Code\" subtitle \"確認待ち\"' -e 'tell application id \"com.mitchellh.ghostty\" to activate'",
             "async": true,
             "statusMessage": "確認待ち通知を表示中"
           }
@@ -50,7 +50,7 @@
           },
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Claude Codeがタスクを完了しました\" with title \"Claude Code\" subtitle \"タスク処理終了\"' -e 'tell application id \"com.microsoft.VSCode\" to activate'",
+            "command": "osascript -e 'display notification \"Claude Codeがタスクを完了しました\" with title \"Claude Code\" subtitle \"タスク処理終了\"' -e 'tell application id \"com.mitchellh.ghostty\" to activate'",
             "async": true,
             "statusMessage": "タスク完了通知を表示中"
           }
