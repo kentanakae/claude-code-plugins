@@ -115,18 +115,35 @@ let red = "\u{001B}[31m"
 let purple = "\u{001B}[95m"
 let gray = "\u{001B}[90m"
 
+// MARK: - Helpers
+
+func runCommand(executable: String = "/usr/bin/env", _ args: [String], suppressStderr: Bool = false) -> (output: String, status: Int32) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = args
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    if suppressStderr { process.standardError = FileHandle.nullDevice }
+    try? process.run()
+    process.waitUntilExit()
+    let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return (output, process.terminationStatus)
+}
+
+func colorForPercent(_ pct: Int) -> String {
+    switch pct {
+    case 0..<warningThreshold: return green
+    case warningThreshold..<dangerThreshold: return yellow
+    default: return red
+    }
+}
+
 // MARK: - Rate Limit Structs
 
 struct RateLimitEntry: Decodable {
     let utilization: Double?
     let resetsAt: String?
-}
-
-struct ExtraUsage: Decodable {
-    let isEnabled: Bool?
-    let monthlyLimit: Double?
-    let usedCredits: Double?
-    let utilization: Double?
 }
 
 struct UsageResponse: Decodable {
@@ -136,28 +153,15 @@ struct UsageResponse: Decodable {
     let sevenDayOpus: RateLimitEntry?
     let sevenDaySonnet: RateLimitEntry?
     let sevenDayCowork: RateLimitEntry?
-    let extraUsage: ExtraUsage?
 }
 
 // MARK: - Rate Limit Functions
 
 func getAccessToken() -> String? {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-    process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = FileHandle.nullDevice
-    try? process.run()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else { return nil }
-
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    guard let jsonString = String(data: data, encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines),
-        !jsonString.isEmpty else { return nil }
-
-    guard let jsonData = jsonString.data(using: .utf8),
+    let (output, status) = runCommand(executable: "/usr/bin/security",
+        ["find-generic-password", "-s", "Claude Code-credentials", "-w"], suppressStderr: true)
+    guard status == 0, !output.isEmpty,
+          let jsonData = output.data(using: .utf8),
           let root = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
           let oauth = root["claudeAiOauth"] as? [String: Any],
           let token = oauth["accessToken"] as? String else { return nil }
@@ -258,10 +262,8 @@ struct CurrentUsage: Decodable {
 struct InputRoot: Decodable {
     let model: Model?
     let cost: Cost?
-    let sessionID: String?
     let contextWindow: ContextWindow?
 }
-
 
 func formatTokens(_ value: Int) -> String {
     let v = Double(value)
@@ -286,104 +288,44 @@ guard let input = try? decoder.decode(InputRoot.self, from: stdinData) else {
 let cwd = FileManager.default.currentDirectoryPath
 
 var parts: [String] = []
+var metricsParts: [String] = []
 
 if showModel {
     let modelName = input.model?.displayName ?? "-"
     parts.append("\(cyan)\(modelName)\(reset)")
 }
 
-var branchText: String?
 if showBranch || showDirty {
-    let gitProcess = Process()
-    gitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    gitProcess.arguments = [
-        "git",
-        "-C",
-        cwd,
-        "rev-parse",
-        "--abbrev-ref",
-        "HEAD",
-    ]
-    let gitPipe = Pipe()
-    gitProcess.standardOutput = gitPipe
-    try? gitProcess.run()
-    gitProcess.waitUntilExit()
-    let branch = String(
-        data: gitPipe.fileHandleForReading.readDataToEndOfFile(),
-        encoding: .utf8
-    )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let (branch, branchStatus) = runCommand(["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"])
 
-    if gitProcess.terminationStatus == 0 && !branch.isEmpty {
+    if branchStatus == 0 && !branch.isEmpty {
         var dirtyMark = ""
         if showDirty {
-            let dirtyProcess = Process()
-            dirtyProcess.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            dirtyProcess.arguments = [
-                "git",
-                "--no-optional-locks",
-                "-C",
-                cwd,
-                "status",
-                "--porcelain",
-            ]
-            let dirtyPipe = Pipe()
-            dirtyProcess.standardOutput = dirtyPipe
-            try? dirtyProcess.run()
-            dirtyProcess.waitUntilExit()
-            let dirtyOutput = String(
-                data: dirtyPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            ) ?? ""
-            if !dirtyOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                dirtyMark = "✱"
+            let (dirtyOutput, _) = runCommand(["git", "--no-optional-locks", "-C", cwd, "status", "--porcelain"])
+            if !dirtyOutput.isEmpty { dirtyMark = "✱" }
+        }
+
+        if showBranch {
+            // GitHubリモートURLを取得してハイパーリンクを生成
+            var githubBranchURL: String?
+            let (remoteURL, remoteStatus) = runCommand(["git", "-C", cwd, "remote", "get-url", "origin"], suppressStderr: true)
+            if remoteStatus == 0 {
+                let pattern = "github\\.com[:/]([^/]+/[^/]+?)(?:\\.git)?$"
+                if let regex = try? NSRegularExpression(pattern: pattern),
+                   let match = regex.firstMatch(in: remoteURL, range: NSRange(remoteURL.startIndex..., in: remoteURL)),
+                   let repoRange = Range(match.range(at: 1), in: remoteURL) {
+                    githubBranchURL = "https://github.com/\(String(remoteURL[repoRange]))/tree/\(branch)"
+                }
             }
-        }
 
-        // GitHubリモートURLを取得してハイパーリンクを生成
-        var githubBranchURL: String?
-        let remoteProcess = Process()
-        remoteProcess.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        remoteProcess.arguments = ["git", "-C", cwd, "remote", "get-url", "origin"]
-        let remotePipe = Pipe()
-        remoteProcess.standardOutput = remotePipe
-        remoteProcess.standardError = FileHandle.nullDevice
-        try? remoteProcess.run()
-        remoteProcess.waitUntilExit()
-
-        if remoteProcess.terminationStatus == 0 {
-            let remoteURL = String(
-                data: remotePipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-            // SSH形式: git@github.com:owner/repo.git
-            // HTTPS形式: https://github.com/owner/repo.git
-            let pattern = "github\\.com[:/]([^/]+/[^/]+?)(?:\\.git)?$"
-            if let regex = try? NSRegularExpression(pattern: pattern),
-               let match = regex.firstMatch(
-                   in: remoteURL,
-                   range: NSRange(remoteURL.startIndex..., in: remoteURL)
-               ),
-               let repoRange = Range(match.range(at: 1), in: remoteURL)
-            {
-                let repoPath = String(remoteURL[repoRange])
-                githubBranchURL = "https://github.com/\(repoPath)/tree/\(branch)"
+            // OSC 8ハイパーリンク形式: ESC]8;;URL BEL text ESC]8;; BEL
+            let branchDisplay: String
+            if let url = githubBranchURL {
+                branchDisplay = "\u{001B}]8;;\(url)\u{0007}\(branch)\u{001B}]8;;\u{0007}"
+            } else {
+                branchDisplay = branch
             }
-        }
-
-        // OSC 8ハイパーリンク形式でブランチ名を生成
-        // 形式: ESC]8;;URL BEL text ESC]8;; BEL
-        let osc8Link = { (url: String, text: String) -> String in
-            "\u{001B}]8;;\(url)\u{0007}\(text)\u{001B}]8;;\u{0007}"
-        }
-        if let url = githubBranchURL {
-            branchText = "\(green)\(osc8Link(url, branch))\(dirtyMark)\(reset)"
-        } else {
-            branchText = "\(green)\(branch)\(dirtyMark)\(reset)"
-        }
-
-        if showBranch, let text = branchText {
-            parts.append(text)
+            parts.append("\(green)\(branchDisplay)\(dirtyMark)\(reset)")
         }
     }
 }
@@ -435,18 +377,12 @@ if showBar {
         bufferFill = max(barLength - usageBlocks, 0)
     }
 
-    let barColor: String
+    let barColor = colorForPercent(percent)
     let bufferColor: String
     switch percent {
-    case 0..<warningThreshold:
-        barColor = green
-        bufferColor = "\u{001B}[38;5;22m"
-    case warningThreshold..<dangerThreshold:
-        barColor = yellow
-        bufferColor = "\u{001B}[38;5;58m"
-    default:
-        barColor = red
-        bufferColor = "\u{001B}[38;5;52m"
+    case 0..<warningThreshold:   bufferColor = "\u{001B}[38;5;22m"
+    case warningThreshold..<dangerThreshold: bufferColor = "\u{001B}[38;5;58m"
+    default:                     bufferColor = "\u{001B}[38;5;52m"
     }
 
     let bar = barColor
@@ -461,9 +397,7 @@ if showBar {
 
 // MARK: - Rate Limit Display
 if showRate {
-    if getAccessToken() == nil {
-        parts.append("\(red)rate: no auth\(reset)")
-    } else if let usage = fetchRateLimit(cacheTTL: cacheTTL) {
+    if let usage = fetchRateLimit(cacheTTL: cacheTTL) {
         var entries: [(String, RateLimitEntry?)] = [("5h", usage.fiveHour), ("7d", usage.sevenDay)]
         if showRateDetail {
             let detailEntries: [(String, RateLimitEntry?)] = [
@@ -483,12 +417,7 @@ if showRate {
                 let emptyCount = rateBarLength - filledCount
                 let bar = String(repeating: "█", count: filledCount)
                     + String(repeating: "░", count: emptyCount)
-                let color: String
-                switch pct {
-                case 0..<warningThreshold: color = green
-                case warningThreshold..<dangerThreshold: color = yellow
-                default: color = red
-                }
+                let color = colorForPercent(pct)
                 let resetPrefix: String
                 if let resetStr = entry?.resetsAt, let formatted = formatResetTime(resetStr) {
                     resetPrefix = "\(label)[\(formatted)]"
@@ -500,19 +429,22 @@ if showRate {
                 rateParts.append("\(gray)\(label):-%\(reset)")
             }
         }
-        parts.append(rateParts.joined(separator: " | "))
+        metricsParts.append(rateParts.joined(separator: " | "))
     } else {
-        parts.append("\(yellow)rate: fetch error\(reset)")
+        metricsParts.append("\(yellow)rate: login needed\(reset)")
     }
 }
 
 if showUsage, let used = usageTokens {
-    parts.append("\(formatTokens(used)) / \(formatTokens(limit))")
+    metricsParts.append("\(formatTokens(used)) / \(formatTokens(limit))")
 }
 
 if showCost {
     let raw = input.cost?.totalCostUsd.map { String(format: "$%.5f", $0) } ?? "-"
-    parts.append("\(purple)\(raw)\(reset)")
+    metricsParts.append("\(purple)\(raw)\(reset)")
 }
 
-print(parts.joined(separator: " | "))
+var lines: [String] = []
+if !parts.isEmpty { lines.append(parts.joined(separator: " | ")) }
+if !metricsParts.isEmpty { lines.append(metricsParts.joined(separator: " | ")) }
+print(lines.joined(separator: "\n"))
