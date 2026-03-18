@@ -68,31 +68,34 @@ AskUserQuestion（multiSelect: true）で表示項目を選択させる。AskUse
 
 | 項目 | ON フラグ | OFF フラグ |
 |------|-----------|------------|
+| プロジェクトパス | --show-project | --no-project |
 | モデル名 | --show-model | --no-model |
 | Git ブランチ | --show-branch | --no-branch |
 | Dirty mark | --show-dirty | --no-dirty |
-| コンテキストバー | --show-bar | --no-bar |
 
 **質問2（表示・レート）:**
 
 | 項目 | ON フラグ | OFF フラグ |
 |------|-----------|------------|
+| コンテキストバー | --show-bar | --no-bar |
 | トークン使用量 | --show-usage | --no-usage |
 | コスト | --show-cost | --no-cost |
 | レート制限 | --show-rate | --no-rate |
-| レート詳細 | --rate-detail | --no-rate-detail |
 
 全ての項目を未選択の状態で提示する。ユーザーが選択した項目に ON フラグを、選択しなかった項目に OFF フラグを付与する。
 
 #### レート制限の詳細設定
 
-レート制限を ON にした場合、**続けて別の AskUserQuestion** でレート制限の詳細設定を確認する。以下の2つの質問を1回の AskUserQuestion で同時に送信する:
+レート制限を ON にした場合、**続けて別の AskUserQuestion** でレート制限の詳細設定を確認する。以下の3つの質問を1回の AskUserQuestion で同時に送信する:
 
-**質問1: バーの長さ**（フラグ: `--rate-bar-length <n>`、デフォルト: 5）
+**質問1: レート詳細**（フラグ: `--rate-detail` / `--no-rate-detail`、デフォルト: OFF）
+- 選択肢: `ON`, `OFF (デフォルト)`
+
+**質問2: バーの長さ**（フラグ: `--rate-bar-length <n>`、デフォルト: 5）
 - 選択肢: `3`, `5 (デフォルト)`, `10`
 - ユーザーは「Other」で任意の数値も入力可能
 
-**質問2: キャッシュ TTL（秒）**（フラグ: `--cache-ttl <n>`、デフォルト: 60）
+**質問3: キャッシュ TTL（秒）**（フラグ: `--cache-ttl <n>`、デフォルト: 60）
 - 選択肢: `30`, `60 (デフォルト)`, `120`
 - ユーザーは「Other」で任意の数値も入力可能
 
@@ -155,6 +158,7 @@ Bash で `install` コマンドを使い、`${CLAUDE_PLUGIN_ROOT}/skills/setup-s
 
 | 項目 | ON フラグ | OFF フラグ |
 |------|-----------|------------|
+| プロジェクトパス | --show-project | --no-project |
 | モデル名 | --show-model | --no-model |
 | Git ブランチ | --show-branch | --no-branch |
 | Dirty mark | --show-dirty | --no-dirty |

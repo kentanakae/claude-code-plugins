@@ -10,6 +10,7 @@ import Foundation
 
 // MARK: - Default Configuration
 
+var showProject = true
 var showModel = true
 var showBranch = true
 var showDirty = true
@@ -34,6 +35,8 @@ var argIndex = 1
 while argIndex < args.count {
     switch args[argIndex] {
     // Boolean flags
+    case "--show-project": showProject = true
+    case "--no-project":   showProject = false
     case "--show-model":   showModel = true
     case "--no-model":     showModel = false
     case "--show-branch":  showBranch = true
@@ -74,6 +77,7 @@ while argIndex < args.count {
             Usage: statusline [OPTIONS]
 
             Options (boolean):
+              --show-project / --no-project     Show project path (default: on)
               --show-model / --no-model         Show model name (default: on)
               --show-branch / --no-branch       Show git branch (default: on)
               --show-dirty / --no-dirty         Show dirty mark (default: on)
@@ -300,7 +304,8 @@ if showBranch || showDirty {
         }
 
         if showBranch {
-            // GitHubリモートURLを取得してハイパーリンクを生成
+            // FIXME: OSC 8 ハイパーリンクが Claude Code のステータスラインで機能しない
+            // 対応されたら GitHubリモートURLを取得してハイパーリンクを生成
             var githubBranchURL: String?
             let (remoteURL, remoteStatus) = runCommand(["git", "-C", cwd, "remote", "get-url", "origin"], suppressStderr: true)
             if remoteStatus == 0 {
@@ -311,8 +316,6 @@ if showBranch || showDirty {
                     githubBranchURL = "https://github.com/\(String(remoteURL[repoRange]))/tree/\(branch)"
                 }
             }
-
-            // OSC 8ハイパーリンク形式: ESC]8;;URL BEL text ESC]8;; BEL
             let branchDisplay: String
             if let url = githubBranchURL {
                 branchDisplay = "\u{001B}]8;;\(url)\u{0007}\(branch)\u{001B}]8;;\u{0007}"
@@ -439,6 +442,22 @@ if showCost {
 }
 
 var lines: [String] = []
+
+if showProject {
+    var projectPath = cwd
+    if let home = ProcessInfo.processInfo.environment["HOME"], projectPath.hasPrefix(home) {
+        projectPath = "~" + String(projectPath.dropFirst(home.count))
+    }
+    let components = projectPath.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+    if components.count > 4 {
+        let root = components.first! == "~" ? "~" : ""
+        projectPath = root + "/.../" + components.suffix(3).joined(separator: "/")
+    }
+    // FIXME: OSC 8 ハイパーリンクが Claude Code のステータスラインで機能しない
+    // 対応されたら file:// フォールバックを削除する
+    lines.append("\u{001B}]8;;file://\(cwd)\u{0007}\(gray)\(projectPath)\(reset)\u{001B}]8;;\u{0007}")
+}
+
 if !parts.isEmpty { lines.append(parts.joined(separator: " | ")) }
 if !metricsParts.isEmpty { lines.append(metricsParts.joined(separator: " | ")) }
 print(lines.joined(separator: "\n"))
