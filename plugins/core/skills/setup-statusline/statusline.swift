@@ -16,8 +16,6 @@ var showDirty = true
 var showUsage = false
 var showCost = false
 
-var autocompactBufferSize = 45_000
-
 var showRate = true
 var showRateDetail = false
 var rateBarLength = 5
@@ -53,9 +51,6 @@ while argIndex < args.count {
     case "--rate-detail":    showRateDetail = true
     case "--no-rate-detail": showRateDetail = false
     // Value flags
-    case "--autocompact-buffer-size":
-        argIndex += 1
-        if argIndex < args.count, let v = Int(args[argIndex]) { autocompactBufferSize = v }
     case "--bar-length":
         argIndex += 1
         if argIndex < args.count, let v = Int(args[argIndex]) { barLength = v }
@@ -89,7 +84,6 @@ while argIndex < args.count {
               --rate-detail / --no-rate-detail   Show per-model rate details (default: off)
 
             Options (value):
-              --autocompact-buffer-size <n>     Autocompact buffer size (default: 45000)
               --bar-length <n>                  Context bar length (default: 10)
               --context-window-size <n>         Default context window size (default: 200000)
               --warning-threshold <n>           Warning threshold percent (default: 50)
@@ -346,11 +340,11 @@ if let cw = input.contextWindow {
 }
 
 if showBar {
-    let effectiveLimit = limit - autocompactBufferSize
+    let effectiveLimit = Int(Double(limit) * 0.95)
 
     let percent: Int
     if let used = usageTokens {
-        let ratio = min(Double(used) / Double(limit), 1.0)
+        let ratio = min(Double(used) / Double(effectiveLimit), 1.0)
         percent = Int(ratio * 100)
     } else {
         percent = 0
@@ -359,7 +353,7 @@ if showBar {
     // バー全体を total にマッピング
     let usage = min(usageTokens ?? 0, limit)
     let usageBlocks = Int(round(Double(barLength) * Double(usage) / Double(limit)))
-    let effectiveLimitPos = Int(round(Double(barLength) * Double(effectiveLimit) / Double(limit)))
+    let effectiveLimitPos = min(Int(Double(barLength) * Double(effectiveLimit) / Double(limit)), barLength - 1)
 
     let filled: Int
     let empty: Int
@@ -413,7 +407,7 @@ if showRate {
             if let util = entry?.utilization {
                 let clampedUtil = min(max(util / 100.0, 0), 1.0)
                 let pct = Int(clampedUtil * 100)
-                let filledCount = min(Int(round(Double(rateBarLength) * clampedUtil)), rateBarLength)
+                let filledCount = min(Int(Double(rateBarLength) * clampedUtil), rateBarLength)
                 let emptyCount = rateBarLength - filledCount
                 let bar = String(repeating: "█", count: filledCount)
                     + String(repeating: "░", count: emptyCount)

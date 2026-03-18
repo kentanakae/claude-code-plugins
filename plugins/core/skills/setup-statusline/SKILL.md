@@ -19,52 +19,19 @@ allowed-tools: Read, Write, Edit, Bash
 
 ## 共通ルール
 
-### 操作方法の使い分け
-
-設定ファイルの操作は、対象がホームフォルダかプロジェクトフォルダかによって方法を使い分ける。
-
-- **ホームフォルダ**（`~/.claude/settings.json`, `~/.claude/settings.local.json`）→ Bash で `${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/settings-helper` を呼び出す
-- **プロジェクトフォルダ**（`.claude/settings.json`, `.claude/settings.local.json`）→ 従来通り Read / Edit / Write ツールを使用
-
-以降の各ステップでこのルールに従うこと。
-
 ### 共通手順 A: statusLine の存否チェック（4ファイル）
 
-以下の4ファイルについて `statusLine` キーの存否をチェックする。
+以下の4ファイルを Read で読み込み、`statusLine` キーの存否をチェックする（ファイルが存在しない場合はスキップ）。`./.claude/` で始まるパスはカレントディレクトリからの相対パスなので、Read には絶対パスに変換して渡すこと。
 
-**ホームフォルダの2ファイル** — Bash で `settings-helper has-statusline` を実行:
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/settings-helper has-statusline ~/.claude/settings.json
-```
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/settings-helper has-statusline ~/.claude/settings.local.json
-```
-
-終了コード 0 = statusLine あり、1 = なし。
-
-**プロジェクトフォルダの2ファイル** — Read で確認（存在しない場合はスキップ）。`./.claude/` で始まるパスはカレントディレクトリからの相対パスなので、Read には絶対パスに変換して渡すこと。
-
+- `~/.claude/settings.json`
+- `~/.claude/settings.local.json`
 - `./.claude/settings.json`
 - `./.claude/settings.local.json`
-
-それぞれの JSON に `statusLine` キーが存在するかチェックする。
 
 ### 共通手順 B: statusLine の書き込み
 
 `<コピー先パス>` は常に `~/.claude/statusline` を使用する。
 `<flags>` 部分は Step 2-2 のルールに従い、全項目に ON/OFF フラグを明示的に付与する。
-
-**ホームフォルダの場合** — Bash で以下を実行:
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/settings-helper write-statusline <設定ファイルパス> "<コピー先パス> <flags>"
-```
-
-`write-statusline` は `statusLine` 構造体（type, command, padding）の作成・既存キーの保持・ディレクトリ作成を全て処理するため、Read / Edit / Write は不要。
-
-**プロジェクトフォルダの場合**:
 
 1. 対象の設定ファイルを Read で読み込む。ファイルが存在しない場合は `{}` として扱う。
 2. JSON をパースし、`statusLine` キーを以下の形式で追加または更新する:
@@ -144,7 +111,6 @@ Bash で `install` コマンドを使い、`${CLAUDE_PLUGIN_ROOT}/skills/setup-s
 以下を表示する:
 - 設定先のファイルパス
 - 設定した `statusLine` の内容
-- 「Claude Code を再起動すると反映されます」
 
 ## Step 3: アンインストールフロー
 
@@ -158,19 +124,7 @@ Bash で `install` コマンドを使い、`${CLAUDE_PLUGIN_ROOT}/skills/setup-s
 
 ### 3-2. 設定ファイルの編集
 
-対象の設定ファイルから `statusLine` キーとその値を削除する。他のキーは保持する。
-
-#### ホームフォルダの場合
-
-Bash で以下を実行する:
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/settings-helper remove-statusline <設定ファイルパス>
-```
-
-#### プロジェクトフォルダの場合
-
-Edit ツールを使用する。
+対象の設定ファイルから `statusLine` キーとその値を Edit で削除する。他のキーは保持する。
 
 ### 3-3. statusline バイナリの削除
 
@@ -195,17 +149,9 @@ Edit ツールを使用する。
 
 対象ファイルの `statusLine.command` の値からフラグ部分を解析し、各項目の現在の状態を特定する。
 
-#### 設定ファイルの読み取り
-
-- **ホームフォルダの場合**: Bash で `settings-helper read` を実行し、出力された JSON から `statusLine.command` の値を取得する:
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/settings-helper read <設定ファイルパス>
-```
-
-- **プロジェクトフォルダの場合**: 従来通り Read で読み取る。
-
 #### フラグ解析
+
+対象の設定ファイルを Read で読み込み、`statusLine.command` の値からフラグ部分を解析する。
 
 | 項目 | ON フラグ | OFF フラグ |
 |------|-----------|------------|
@@ -251,4 +197,3 @@ Step 2-3 と同じ要領で、`install -m 755` を使い `${CLAUDE_PLUGIN_ROOT}/
 以下を表示する:
 - 更新したファイルパス
 - 設定した `statusLine` の内容
-- 「Claude Code を再起動すると反映されます」
