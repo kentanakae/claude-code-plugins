@@ -101,9 +101,44 @@ AskUserQuestion（multiSelect: true）で表示項目を選択させる。AskUse
 
 デフォルト値と異なる値が選択された場合のみフラグを付与する。
 
-### 2-3. statusline バイナリのインストール
+### 2-3. バイナリのインストール
 
-Bash で `install` コマンドを使い、`${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/statusline` を `~/.claude/statusline` にコピーする。`install -m 755` でコピーと実行権限の付与を同時に行う。設定先に関わらず、コピー先は常に `~/.claude/statusline` に固定する。
+Bash で `install` コマンドを使い、以下の2つのバイナリを `~/.claude/` にコピーする。`install -m 755` でコピーと実行権限の付与を同時に行う。
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/statusline` → `~/.claude/statusline`
+- `${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/refresh-claude-auth` → `~/.claude/refresh-claude-auth`
+
+### 2-3b. トークン自動リフレッシュの設定
+
+レート制限表示を ON にした場合、OAuth トークンの自動リフレッシュ用 launchd ジョブを設定する。
+
+1. ユーザーのホームディレクトリを取得する（`$HOME` 環境変数または `~` の展開結果）。
+2. 以下の内容で `~/Library/LaunchAgents/com.claude-code.refresh-auth.plist` を Write で作成する。**注意: launchd plist では `~` は展開されないため、ProgramArguments には絶対パスを使用すること。**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude-code.refresh-auth</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string><ホームディレクトリ絶対パス>/.claude/refresh-claude-auth</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>7200</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/claude-refresh-auth.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/claude-refresh-auth.log</string>
+</dict>
+</plist>
+```
+
+3. Bash で `launchctl load ~/Library/LaunchAgents/com.claude-code.refresh-auth.plist` を実行する。
 
 ### 2-4. 設定ファイルの編集
 
@@ -129,9 +164,14 @@ Bash で `install` コマンドを使い、`${CLAUDE_PLUGIN_ROOT}/skills/setup-s
 
 対象の設定ファイルから `statusLine` キーとその値を Edit で削除する。他のキーは保持する。
 
-### 3-3. statusline バイナリの削除
+### 3-3. バイナリと launchd ジョブの削除
 
-`~/.claude/statusline` を Bash で `rm` コマンドを使い削除する。ファイルが存在しない場合はスキップする。
+Bash で以下を実行する（存在しない場合はスキップ）:
+
+1. `launchctl unload ~/Library/LaunchAgents/com.claude-code.refresh-auth.plist 2>/dev/null || true`
+2. `rm -f ~/Library/LaunchAgents/com.claude-code.refresh-auth.plist`
+3. `rm -f ~/.claude/statusline`
+4. `rm -f ~/.claude/refresh-claude-auth`
 
 ### 3-4. 完了メッセージ
 
@@ -188,9 +228,14 @@ Step 2-2 と同じ形式で、AskUserQuestion（multiSelect: true）を使い表
 
 レート制限を ON にした場合、Step 2-2 と同じ形式でレート制限の詳細設定を確認する。ただし選択肢には **4-2 で解析した現在の設定値** を明示すること。
 
-### 4-4. statusline バイナリの更新
+### 4-4. バイナリと launchd ジョブの更新
 
-Step 2-3 と同じ要領で、`install -m 755` を使い `${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/statusline` を `~/.claude/statusline` にインストールする。
+Step 2-3 と同じ要領で、`install -m 755` を使い以下の2つのバイナリを更新する:
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/statusline` → `~/.claude/statusline`
+- `${CLAUDE_PLUGIN_ROOT}/skills/setup-statusline/refresh-claude-auth` → `~/.claude/refresh-claude-auth`
+
+レート制限が ON の場合、Step 2-3b と同じ要領で launchd ジョブを再設定する（既存ジョブがあれば `launchctl unload` してから再設定）。
 
 ### 4-5. 設定ファイルの更新
 
