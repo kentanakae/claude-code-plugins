@@ -18,9 +18,7 @@ var showUsage = false
 var showCost = false
 
 var showRate = true
-var showRateDetail = false
 var rateBarLength = 5
-var cacheTTL = 60
 
 var showBar = true
 var barLength = 10
@@ -51,8 +49,6 @@ while argIndex < args.count {
     case "--no-bar":       showBar = false
     case "--show-rate":    showRate = true
     case "--no-rate":      showRate = false
-    case "--rate-detail":    showRateDetail = true
-    case "--no-rate-detail": showRateDetail = false
     // Value flags
     case "--bar-length":
         argIndex += 1
@@ -69,9 +65,6 @@ while argIndex < args.count {
     case "--rate-bar-length":
         argIndex += 1
         if argIndex < args.count, let v = Int(args[argIndex]) { rateBarLength = v }
-    case "--cache-ttl":
-        argIndex += 1
-        if argIndex < args.count, let v = Int(args[argIndex]) { cacheTTL = v }
     case "--help", "-h":
         let help = """
             Usage: statusline [OPTIONS]
@@ -85,7 +78,6 @@ while argIndex < args.count {
               --show-cost / --no-cost           Show session cost (default: off)
               --show-bar / --no-bar             Show context bar (default: on)
               --show-rate / --no-rate           Show rate limit (default: on)
-              --rate-detail / --no-rate-detail   Show per-model rate details (default: off)
 
             Options (value):
               --bar-length <n>                  Context bar length (default: 10)
@@ -93,7 +85,6 @@ while argIndex < args.count {
               --warning-threshold <n>           Warning threshold percent (default: 50)
               --danger-threshold <n>            Danger threshold percent (default: 80)
               --rate-bar-length <n>            Rate limit bar length (default: 5)
-              --cache-ttl <n>                  Cache TTL in seconds (default: 60)
             """
         print(help)
         exit(0)
@@ -137,42 +128,8 @@ func colorForPercent(_ pct: Int) -> String {
     }
 }
 
-// MARK: - Rate Limit Structs
-
-struct RateLimitEntry: Decodable {
-    let utilization: Double?
-    let resetsAt: String?
-}
-
-struct UsageResponse: Decodable {
-    let fiveHour: RateLimitEntry?
-    let sevenDay: RateLimitEntry?
-    let sevenDayOauthApps: RateLimitEntry?
-    let sevenDayOpus: RateLimitEntry?
-    let sevenDaySonnet: RateLimitEntry?
-    let sevenDayCowork: RateLimitEntry?
-}
-
-// MARK: - Rate Limit Functions
-
-func getAccessToken() -> String? {
-    let (output, status) = runCommand(executable: "/usr/bin/security",
-        ["find-generic-password", "-s", "Claude Code-credentials", "-w"], suppressStderr: true)
-    guard status == 0, !output.isEmpty,
-          let jsonData = output.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-          let oauth = root["claudeAiOauth"] as? [String: Any],
-          let token = oauth["accessToken"] as? String else { return nil }
-    return token
-}
-
-func formatResetTime(_ isoString: String) -> String? {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-    guard let date = formatter.date(from: isoString)
-        ?? ISO8601DateFormatter().date(from: isoString) else { return nil }
-
+func formatResetTime(_ timestamp: Int) -> String {
+    let date = Date(timeIntervalSince1970: Double(timestamp))
     let calendar = Calendar.current
     let displayFormatter = DateFormatter()
     displayFormatter.locale = Locale.current
@@ -184,55 +141,6 @@ func formatResetTime(_ isoString: String) -> String? {
     }
 
     return displayFormatter.string(from: date)
-}
-
-func fetchRateLimit(cacheTTL: Int) -> UsageResponse? {
-    let cacheFile = "/tmp/claude-rate-limit-cache.json"
-    let fm = FileManager.default
-
-    // Check cache
-    if let attrs = try? fm.attributesOfItem(atPath: cacheFile),
-       let modDate = attrs[.modificationDate] as? Date,
-       Date().timeIntervalSince(modDate) < Double(cacheTTL),
-       let cacheData = fm.contents(atPath: cacheFile) {
-        let dec = JSONDecoder()
-        dec.keyDecodingStrategy = .convertFromSnakeCase
-        if let cached = try? dec.decode(UsageResponse.self, from: cacheData) {
-            return cached
-        }
-    }
-
-    // Fetch from API
-    guard let token = getAccessToken(),
-          let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return nil }
-
-    var request = URLRequest(url: url, timeoutInterval: 5)
-    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-
-    let semaphore = DispatchSemaphore(value: 0)
-    var result: UsageResponse?
-    var responseData: Data?
-
-    let task = URLSession.shared.dataTask(with: request) { data, response, error in
-        defer { semaphore.signal() }
-        guard error == nil, let data = data,
-              let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else { return }
-        responseData = data
-        let dec = JSONDecoder()
-        dec.keyDecodingStrategy = .convertFromSnakeCase
-        result = try? dec.decode(UsageResponse.self, from: data)
-    }
-    task.resume()
-    _ = semaphore.wait(timeout: .now() + 6)
-
-    // Write cache
-    if let data = responseData {
-        fm.createFile(atPath: cacheFile, contents: data)
-    }
-
-    return result
 }
 
 // MARK: - Data Structs
@@ -257,10 +165,21 @@ struct CurrentUsage: Decodable {
     let cacheReadInputTokens: Int?
 }
 
+struct RateLimitWindow: Decodable {
+    let usedPercentage: Int?
+    let resetsAt: Int?
+}
+
+struct RateLimits: Decodable {
+    let fiveHour: RateLimitWindow?
+    let sevenDay: RateLimitWindow?
+}
+
 struct InputRoot: Decodable {
     let model: Model?
     let cost: Cost?
     let contextWindow: ContextWindow?
+    let rateLimits: RateLimits?
 }
 
 func formatTokens(_ value: Int) -> String {
@@ -393,43 +312,30 @@ if showBar {
 }
 
 // MARK: - Rate Limit Display
-if showRate {
-    if let usage = fetchRateLimit(cacheTTL: cacheTTL) {
-        var entries: [(String, RateLimitEntry?)] = [("5h", usage.fiveHour), ("7d", usage.sevenDay)]
-        if showRateDetail {
-            let detailEntries: [(String, RateLimitEntry?)] = [
-                ("7d-son", usage.sevenDaySonnet),
-                ("7d-opus", usage.sevenDayOpus),
-                ("7d-oauth", usage.sevenDayOauthApps),
-                ("7d-cowk", usage.sevenDayCowork),
-            ]
-            entries.append(contentsOf: detailEntries)
-        }
-        var rateParts: [String] = []
-        for (label, entry) in entries {
-            if let util = entry?.utilization {
-                let clampedUtil = min(max(util / 100.0, 0), 1.0)
-                let pct = Int(clampedUtil * 100)
-                let filledCount = min(Int(Double(rateBarLength) * clampedUtil), rateBarLength)
-                let emptyCount = rateBarLength - filledCount
-                let bar = String(repeating: "█", count: filledCount)
-                    + String(repeating: "░", count: emptyCount)
-                let color = colorForPercent(pct)
-                let resetPrefix: String
-                if let resetStr = entry?.resetsAt, let formatted = formatResetTime(resetStr) {
-                    resetPrefix = "\(label)[\(formatted)]"
-                } else {
-                    resetPrefix = label
-                }
-                rateParts.append("\(color)\(resetPrefix):\(bar) \(pct)%\(reset)")
-            } else if !showRateDetail {
-                rateParts.append("\(gray)\(label):-%\(reset)")
+if showRate, let rateLimits = input.rateLimits {
+    let entries: [(String, RateLimitWindow?)] = [("5h", rateLimits.fiveHour), ("7d", rateLimits.sevenDay)]
+    var rateParts: [String] = []
+    for (label, entry) in entries {
+        if let pct = entry?.usedPercentage {
+            let clampedPct = min(max(pct, 0), 100)
+            let ratio = Double(clampedPct) / 100.0
+            let filledCount = min(Int(Double(rateBarLength) * ratio), rateBarLength)
+            let emptyCount = rateBarLength - filledCount
+            let bar = String(repeating: "█", count: filledCount)
+                + String(repeating: "░", count: emptyCount)
+            let color = colorForPercent(clampedPct)
+            let resetPrefix: String
+            if let timestamp = entry?.resetsAt {
+                resetPrefix = "\(label)[\(formatResetTime(timestamp))]"
+            } else {
+                resetPrefix = label
             }
+            rateParts.append("\(color)\(resetPrefix):\(bar) \(clampedPct)%\(reset)")
+        } else {
+            rateParts.append("\(gray)\(label):-%\(reset)")
         }
-        metricsParts.append(rateParts.joined(separator: " | "))
-    } else {
-        metricsParts.append("\(yellow)rate: login needed\(reset)")
     }
+    metricsParts.append(rateParts.joined(separator: " | "))
 }
 
 if showUsage, let used = usageTokens {
