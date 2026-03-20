@@ -206,6 +206,7 @@ let cwd = FileManager.default.currentDirectoryPath
 
 var parts: [String] = []
 var metricsParts: [String] = []
+var branchString: String?
 
 if showModel {
     let modelName = input.model?.displayName ?? "-"
@@ -241,7 +242,8 @@ if showBranch || showDirty {
             } else {
                 branchDisplay = branch
             }
-            parts.append("\(green)\(branchDisplay)\(dirtyMark)\(reset)")
+            let dirtyColor = dirtyMark.isEmpty ? "" : yellow
+            branchString = "\(green)\(branchDisplay)\(dirtyColor)\(dirtyMark)\(reset)"
         }
     }
 }
@@ -349,21 +351,32 @@ if showCost {
 
 var lines: [String] = []
 
-if showProject {
-    var projectPath = cwd
-    if let home = ProcessInfo.processInfo.environment["HOME"], projectPath.hasPrefix(home) {
-        projectPath = "~" + String(projectPath.dropFirst(home.count))
-    }
-    let components = projectPath.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-    if components.count > 4 {
-        let root = components.first! == "~" ? "~" : ""
-        projectPath = root + "/.../" + components.suffix(3).joined(separator: "/")
-    }
-    // FIXME: OSC 8 ハイパーリンクが Claude Code のステータスラインで機能しない
-    // 対応されたら file:// フォールバックを削除する
-    lines.append("\u{001B}]8;;file://\(cwd)\u{0007}\(gray)\(projectPath)\(reset)\u{001B}]8;;\u{0007}")
-}
-
 if !parts.isEmpty { lines.append(parts.joined(separator: " | ")) }
 if !metricsParts.isEmpty { lines.append(metricsParts.joined(separator: " | ")) }
+
+if showProject || branchString != nil {
+    var bottomParts: [String] = []
+
+    if let branch = branchString {
+        bottomParts.append(branch)
+    }
+
+    if showProject {
+        var projectPath = cwd
+        if let home = ProcessInfo.processInfo.environment["HOME"], projectPath.hasPrefix(home) {
+            projectPath = "~" + String(projectPath.dropFirst(home.count))
+        }
+        let components = projectPath.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        if components.count > 4 {
+            let root = components.first! == "~" ? "~" : ""
+            projectPath = root + "/.../" + components.suffix(3).joined(separator: "/")
+        }
+        // FIXME: OSC 8 ハイパーリンクが Claude Code のステータスラインで機能しない
+        // 対応されたら file:// フォールバックを削除する
+        bottomParts.append("\u{001B}]8;;file://\(cwd)\u{0007}\(gray)\(projectPath)\(reset)\u{001B}]8;;\u{0007}")
+    }
+
+    lines.append(bottomParts.joined(separator: " \(gray)@\(reset) "))
+}
+
 print(lines.joined(separator: "\n"))
