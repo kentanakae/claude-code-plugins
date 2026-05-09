@@ -3,14 +3,59 @@ name: setup-xcodebuildmcp
 description: XcodeBuildMCP の設定ファイル（.xcodebuildmcp/config.yaml）をプロジェクトに生成・セットアップする。xcodebuildmcp, config, setup, simulator, build, Xcode
 argument-hint: [install|edit|uninstall]
 disable-model-invocation: true
-allowed-tools: Bash, Read, Write, Edit, Glob, AskUserQuestion, ExitPlanMode
+allowed-tools: Bash, Read, Write, Edit, Glob, AskUserQuestion, ExitPlanMode, WebFetch
 ---
 
-> 対応 XcodeBuildMCP バージョン: v2.5.1（schemaVersion: 1）。新しいバージョンが出た場合は `enabledWorkflows` の一覧と `sessionDefaults` のフィールドを公式ドキュメント（https://xcodebuildmcp.com/docs/configuration）と突き合わせて更新すること。
+> 対応 XcodeBuildMCP バージョン: **v2.5.1**（schemaVersion: 1）。
+> このバージョン文字列は Step 0-2 で実行される自己更新フロー（詳細手順は `references/self-update.md`）から自動更新される。手動編集も可（`enabledWorkflows` 一覧 / `sessionDefaults` フィールド / Step 4-2 テンプレート / 上記バージョン記載 を公式ドキュメント https://xcodebuildmcp.com/docs/configuration と突き合わせる）。
 
 ## Step 0: プランモード解除
 
 プランモードが有効な場合は、ExitPlanMode ツールを呼び出して解除する。プランモードでない場合はスキップ。
+
+## Step 0-2: バージョンチェック（uninstall 以外）
+
+`$ARGUMENTS[0]` が `uninstall` の場合はこのステップをスキップして Step 1 へ。それ以外は最新版が出ているかをチェックする。
+
+### 0-2-1. 現在バージョンと最新バージョンの取得
+
+- **現在バージョン**: 本ファイル冒頭の引用ブロック（`> 対応 XcodeBuildMCP バージョン: **vX.Y.Z**`）から抽出する
+- **最新バージョン**: Bash で以下を実行:
+
+  ```bash
+  gh api repos/cameroncooke/XcodeBuildMCP/releases/latest --jq .tag_name 2>/dev/null
+  ```
+
+  - 失敗（gh 未インストール / 認証なし / ネットワーク不可 / リポジトリ移動）時は **黙ってこのステップをスキップして Step 1 へ進む**（フローを止めない）
+
+### 0-2-2. バージョン比較と分岐
+
+- 取得した最新タグ（例: `v2.5.1` / `2.5.1`）と現在バージョンを比較
+- **同一**（または最新が現在以下）→ Step 1 へ進む（メッセージ不要）
+- **最新の方が新しい** → 以下を表示:
+
+  ```
+  XcodeBuildMCP の新しいバージョンが利用可能です。
+    現在のスキル対応: v<現在>
+    最新リリース:     v<最新>
+  ```
+
+  続けて AskUserQuestion で 3 択を提示:
+
+  ```
+  question: "スキル定義を最新仕様に更新しますか？"
+  options:
+    - label: "今回はスキップ (Recommended)"
+      description: "今のスキル定義のまま続行する。後で /setup-xcodebuildmcp で再実行すれば再度確認される"
+    - label: "スキル定義を更新する"
+      description: "公式ドキュメントを取得し、enabledWorkflows / sessionDefaults / テンプレートを最新化してから続行する"
+    - label: "キャンセル"
+      description: "今回の処理を中止する"
+  ```
+
+  - 「スキップ」→ Step 1 へ進む
+  - 「キャンセル」→ 終了
+  - 「更新する」→ `references/self-update.md` を Read で読み込み、その手順に従って自己更新を実施。完了またはフォールバックしたら **Step 1 へ進む**（今回のフローは更新前の現在の定義のまま続行する）
 
 ## Step 1: 引数判定と前提確認
 
