@@ -16,12 +16,11 @@ var showBranch = true
 var showDirty = true
 var showUsage = false
 var showCost = false
-
-var showRate = true
-var rateBarLength = 5
-
 var showBar = true
+var showRate = true
+
 var barLength = 10
+var rateBarLength = 5
 var defaultContextWindowSize = 200_000
 var warningThreshold = 50
 var dangerThreshold = 80
@@ -32,7 +31,6 @@ let args = CommandLine.arguments
 var argIndex = 1
 while argIndex < args.count {
     switch args[argIndex] {
-    // Boolean flags
     case "--show-project": showProject = true
     case "--no-project":   showProject = false
     case "--show-model":   showModel = true
@@ -49,10 +47,12 @@ while argIndex < args.count {
     case "--no-bar":       showBar = false
     case "--show-rate":    showRate = true
     case "--no-rate":      showRate = false
-    // Value flags
     case "--bar-length":
         argIndex += 1
         if argIndex < args.count, let v = Int(args[argIndex]) { barLength = v }
+    case "--rate-bar-length":
+        argIndex += 1
+        if argIndex < args.count, let v = Int(args[argIndex]) { rateBarLength = v }
     case "--context-window-size":
         argIndex += 1
         if argIndex < args.count, let v = Int(args[argIndex]) { defaultContextWindowSize = v }
@@ -62,11 +62,8 @@ while argIndex < args.count {
     case "--danger-threshold":
         argIndex += 1
         if argIndex < args.count, let v = Int(args[argIndex]) { dangerThreshold = v }
-    case "--rate-bar-length":
-        argIndex += 1
-        if argIndex < args.count, let v = Int(args[argIndex]) { rateBarLength = v }
     case "--help", "-h":
-        let help = """
+        print("""
             Usage: statusline [OPTIONS]
 
             Options (boolean):
@@ -81,12 +78,11 @@ while argIndex < args.count {
 
             Options (value):
               --bar-length <n>                  Context bar length (default: 10)
+              --rate-bar-length <n>             Rate limit bar length (default: 5)
               --context-window-size <n>         Default context window size (default: 200000)
               --warning-threshold <n>           Warning threshold percent (default: 50)
               --danger-threshold <n>            Danger threshold percent (default: 80)
-              --rate-bar-length <n>            Rate limit bar length (default: 5)
-            """
-        print(help)
+            """)
         exit(0)
     default:
         break
@@ -106,9 +102,9 @@ let gray = "\u{001B}[90m"
 
 // MARK: - Helpers
 
-func runCommand(executable: String = "/usr/bin/env", _ args: [String], suppressStderr: Bool = false) -> (output: String, status: Int32) {
+func runCommand(_ args: [String], suppressStderr: Bool = false) -> (output: String, status: Int32) {
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: executable)
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = args
     let pipe = Pipe()
     process.standardOutput = pipe
@@ -130,17 +126,29 @@ func colorForPercent(_ pct: Int) -> String {
 
 func formatResetTime(_ timestamp: Int) -> String {
     let date = Date(timeIntervalSince1970: Double(timestamp))
-    let calendar = Calendar.current
-    let displayFormatter = DateFormatter()
-    displayFormatter.locale = Locale.current
+    let formatter = DateFormatter()
+    formatter.locale = Locale.current
+    formatter.dateFormat = Calendar.current.isDateInToday(date) ? "H:mm" : "M/d"
+    return formatter.string(from: date)
+}
 
-    if calendar.isDateInToday(date) {
-        displayFormatter.dateFormat = "H:mm"
-    } else {
-        displayFormatter.dateFormat = "M/d"
-    }
+func formatTokens(_ value: Int) -> String {
+    let v = Double(value)
+    if v >= 1_000_000 { return String(format: "%.1fM", v / 1_000_000) }
+    if v >= 1_000     { return String(format: "%.1fK", v / 1_000) }
+    return "\(value)"
+}
 
-    return displayFormatter.string(from: date)
+func renderBar(length: Int, ratio: Double) -> String {
+    let filled = min(Int(ceil(Double(length) * ratio)), length)
+    return String(repeating: "█", count: filled)
+        + String(repeating: "░", count: length - filled)
+}
+
+// FIXME: OSC 8 ハイパーリンクが Claude Code のステータスラインで機能しない
+// 対応されたら呼び出し側のリンク先 URL 生成と合わせて活用される
+func osc8Link(url: String, text: String) -> String {
+    "\u{001B}]8;;\(url)\u{0007}\(text)\u{001B}]8;;\u{0007}"
 }
 
 // MARK: - Data Structs
@@ -182,17 +190,7 @@ struct InputRoot: Decodable {
     let rateLimits: RateLimits?
 }
 
-func formatTokens(_ value: Int) -> String {
-    let v = Double(value)
-    if v >= 1_000_000 {
-        return String(format: "%.1fM", v / 1_000_000)
-    } else if v >= 1_000 {
-        return String(format: "%.1fK", v / 1_000)
-    } else {
-        return "\(value)"
-    }
-}
-
+// MARK: - Input
 
 let stdinData = FileHandle.standardInput.readDataToEndOfFile()
 let decoder = JSONDecoder()
@@ -204,14 +202,61 @@ guard let input = try? decoder.decode(InputRoot.self, from: stdinData) else {
 
 let cwd = FileManager.default.currentDirectoryPath
 
-var parts: [String] = []
-var metricsParts: [String] = []
-var branchString: String?
+// MARK: - Build Segments
+
+var mainParts: [String] = []
 
 if showModel {
     let modelName = input.model?.displayName ?? "-"
-    parts.append("\(cyan)\(modelName)\(reset)")
+    mainParts.append("\(cyan)\(modelName)\(reset)")
 }
+
+// contextWindow から使用量を取得
+let limit: Int = input.contextWindow?.contextWindowSize ?? defaultContextWindowSize
+let usageTokens: Int? = input.contextWindow?.currentUsage.map { u in
+    (u.inputTokens ?? 0)
+        + (u.cacheCreationInputTokens ?? 0)
+        + (u.cacheReadInputTokens ?? 0)
+        + (u.outputTokens ?? 0)
+}
+
+if showBar {
+    let usage = min(usageTokens ?? 0, limit)
+    let ratio = limit > 0 ? Double(usage) / Double(limit) : 0
+    let percent = Int(ratio * 100)
+    let barColor = colorForPercent(percent)
+    let bar = barColor + renderBar(length: barLength, ratio: ratio) + reset
+    mainParts.append("\(bar) \(barColor)\(percent)%\(reset)")
+}
+
+if showRate, let rateLimits = input.rateLimits {
+    let entries: [(String, RateLimitWindow?)] = [("5h", rateLimits.fiveHour), ("7d", rateLimits.sevenDay)]
+    let rateParts: [String] = entries.map { label, entry in
+        guard let pct = entry?.usedPercentage else {
+            return "\(gray)\(label):-%\(reset)"
+        }
+        let clampedPct = min(max(pct, 0), 100)
+        let ratio = Double(clampedPct) / 100.0
+        let bar = renderBar(length: rateBarLength, ratio: ratio)
+        let color = colorForPercent(clampedPct)
+        let prefix = entry?.resetsAt.map { "\(label)[\(formatResetTime($0))]" } ?? label
+        return "\(color)\(prefix):\(bar) \(clampedPct)%\(reset)"
+    }
+    mainParts.append(rateParts.joined(separator: " \(gray)|\(reset) "))
+}
+
+if showUsage, let used = usageTokens {
+    mainParts.append("\(formatTokens(used)) / \(formatTokens(limit))")
+}
+
+if showCost {
+    let raw = input.cost?.totalCostUsd.map { String(format: "$%.5f", $0) } ?? "-"
+    mainParts.append("\(purple)\(raw)\(reset)")
+}
+
+// MARK: - Branch & Project Path
+
+var bottomParts: [String] = []
 
 if showBranch || showDirty {
     let (branch, branchStatus) = runCommand(["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"])
@@ -224,159 +269,54 @@ if showBranch || showDirty {
         }
 
         if showBranch {
-            // FIXME: OSC 8 ハイパーリンクが Claude Code のステータスラインで機能しない
-            // 対応されたら GitHubリモートURLを取得してハイパーリンクを生成
-            var githubBranchURL: String?
+            var branchDisplay = branch
             let (remoteURL, remoteStatus) = runCommand(["git", "-C", cwd, "remote", "get-url", "origin"], suppressStderr: true)
-            if remoteStatus == 0 {
-                let pattern = "github\\.com[:/]([^/]+/[^/]+?)(?:\\.git)?$"
-                if let regex = try? NSRegularExpression(pattern: pattern),
-                   let match = regex.firstMatch(in: remoteURL, range: NSRange(remoteURL.startIndex..., in: remoteURL)),
-                   let repoRange = Range(match.range(at: 1), in: remoteURL) {
-                    githubBranchURL = "https://github.com/\(String(remoteURL[repoRange]))/tree/\(branch)"
-                }
+            if remoteStatus == 0,
+               let regex = try? NSRegularExpression(pattern: "github\\.com[:/]([^/]+/[^/]+?)(?:\\.git)?$"),
+               let match = regex.firstMatch(in: remoteURL, range: NSRange(remoteURL.startIndex..., in: remoteURL)),
+               let repoRange = Range(match.range(at: 1), in: remoteURL) {
+                let url = "https://github.com/\(String(remoteURL[repoRange]))/tree/\(branch)"
+                branchDisplay = osc8Link(url: url, text: branch)
             }
-            let branchDisplay: String
-            if let url = githubBranchURL {
-                branchDisplay = "\u{001B}]8;;\(url)\u{0007}\(branch)\u{001B}]8;;\u{0007}"
-            } else {
-                branchDisplay = branch
-            }
-            let dirtyColor = dirtyMark.isEmpty ? "" : yellow
-            branchString = "\(green)\(branchDisplay)\(dirtyColor)\(dirtyMark)\(reset)"
+            let dirtyColor = dirtyMark.isEmpty ? "" : purple
+            bottomParts.append("\(green)\(branchDisplay)\(dirtyColor)\(dirtyMark)\(reset)")
         }
     }
 }
 
-// contextWindow から使用量を取得
-var usageTokens: Int?
-var limit: Int = defaultContextWindowSize
-
-if let cw = input.contextWindow {
-    limit = cw.contextWindowSize ?? limit
-    if let usage = cw.currentUsage {
-        let tokens = (usage.inputTokens ?? 0)
-            + (usage.cacheCreationInputTokens ?? 0)
-            + (usage.cacheReadInputTokens ?? 0)
-            + (usage.outputTokens ?? 0)
-        usageTokens = tokens
-    }
-}
-
-if showBar {
-    let effectiveLimit = Int(Double(limit) * 0.95)
-
-    let percent: Int
-    if let used = usageTokens {
-        let ratio = min(Double(used) / Double(effectiveLimit), 1.0)
-        percent = Int(ratio * 100)
-    } else {
-        percent = 0
-    }
-
-    // バー全体を total にマッピング
-    let usage = min(usageTokens ?? 0, limit)
-    let usageBlocks = Int(round(Double(barLength) * Double(usage) / Double(limit)))
-    let effectiveLimitPos = min(Int(Double(barLength) * Double(effectiveLimit) / Double(limit)), barLength - 1)
-
-    let filled: Int
-    let empty: Int
-    let bufferFill: Int
-
-    if usageBlocks <= effectiveLimitPos {
-        // 使用量がバッファゾーン未到達
-        filled = usageBlocks
-        empty = effectiveLimitPos - usageBlocks
-        bufferFill = barLength - effectiveLimitPos
-    } else {
-        // 使用量がバッファゾーンに食い込んでいる
-        filled = usageBlocks
-        empty = 0
-        bufferFill = max(barLength - usageBlocks, 0)
-    }
-
-    let barColor = colorForPercent(percent)
-    let bufferColor: String
-    switch percent {
-    case 0..<warningThreshold:   bufferColor = "\u{001B}[38;5;22m"
-    case warningThreshold..<dangerThreshold: bufferColor = "\u{001B}[38;5;58m"
-    default:                     bufferColor = "\u{001B}[38;5;52m"
-    }
-
-    let bar = barColor
-        + String(repeating: "█", count: filled)
-        + String(repeating: "░", count: empty)
-        + bufferColor
-        + String(repeating: "▓", count: bufferFill)
-        + reset
-
-    parts.append("\(bar) \(barColor)\(percent)%\(reset)")
-}
-
-// MARK: - Rate Limit Display
-if showRate, let rateLimits = input.rateLimits {
-    let entries: [(String, RateLimitWindow?)] = [("5h", rateLimits.fiveHour), ("7d", rateLimits.sevenDay)]
-    var rateParts: [String] = []
-    for (label, entry) in entries {
-        if let pct = entry?.usedPercentage {
-            let clampedPct = min(max(pct, 0), 100)
-            let ratio = Double(clampedPct) / 100.0
-            let filledCount = min(Int(Double(rateBarLength) * ratio), rateBarLength)
-            let emptyCount = rateBarLength - filledCount
-            let bar = String(repeating: "█", count: filledCount)
-                + String(repeating: "░", count: emptyCount)
-            let color = colorForPercent(clampedPct)
-            let resetPrefix: String
-            if let timestamp = entry?.resetsAt {
-                resetPrefix = "\(label)[\(formatResetTime(timestamp))]"
-            } else {
-                resetPrefix = label
-            }
-            rateParts.append("\(color)\(resetPrefix):\(bar) \(clampedPct)%\(reset)")
+if showProject {
+    let projectPath: String
+    let (gitRoot, gitStatus) = runCommand(["git", "-C", cwd, "rev-parse", "--show-toplevel"], suppressStderr: true)
+    if gitStatus == 0 && !gitRoot.isEmpty {
+        let repoName = (gitRoot as NSString).lastPathComponent
+        let relative = cwd == gitRoot ? "" : (cwd.hasPrefix(gitRoot + "/") ? String(cwd.dropFirst(gitRoot.count + 1)) : "")
+        let relComponents = relative.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        if relComponents.isEmpty {
+            projectPath = repoName
+        } else if relComponents.count <= 2 {
+            projectPath = "\(repoName)/\(relative)"
         } else {
-            rateParts.append("\(gray)\(label):-%\(reset)")
+            projectPath = "\(repoName)/.../\(relComponents.last!)"
         }
-    }
-    metricsParts.append(rateParts.joined(separator: " | "))
-}
-
-if showUsage, let used = usageTokens {
-    metricsParts.append("\(formatTokens(used)) / \(formatTokens(limit))")
-}
-
-if showCost {
-    let raw = input.cost?.totalCostUsd.map { String(format: "$%.5f", $0) } ?? "-"
-    metricsParts.append("\(purple)\(raw)\(reset)")
-}
-
-var lines: [String] = []
-
-if !parts.isEmpty { lines.append(parts.joined(separator: " | ")) }
-if !metricsParts.isEmpty { lines.append(metricsParts.joined(separator: " | ")) }
-
-if showProject || branchString != nil {
-    var bottomParts: [String] = []
-
-    if let branch = branchString {
-        bottomParts.append(branch)
-    }
-
-    if showProject {
-        var projectPath = cwd
-        if let home = ProcessInfo.processInfo.environment["HOME"], projectPath.hasPrefix(home) {
-            projectPath = "~" + String(projectPath.dropFirst(home.count))
+    } else {
+        var p = cwd
+        if let home = ProcessInfo.processInfo.environment["HOME"], p.hasPrefix(home) {
+            p = "~" + String(p.dropFirst(home.count))
         }
-        let components = projectPath.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        let components = p.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
         if components.count > 4 {
             let root = components.first! == "~" ? "~" : ""
-            projectPath = root + "/.../" + components.suffix(3).joined(separator: "/")
+            p = root + "/.../" + components.suffix(3).joined(separator: "/")
         }
-        // FIXME: OSC 8 ハイパーリンクが Claude Code のステータスラインで機能しない
-        // 対応されたら file:// フォールバックを削除する
-        bottomParts.append("\u{001B}]8;;file://\(cwd)\u{0007}\(gray)\(projectPath)\(reset)\u{001B}]8;;\u{0007}")
+        projectPath = p
     }
-
-    lines.append(bottomParts.joined(separator: " \(gray)@\(reset) "))
+    bottomParts.append(osc8Link(url: "file://\(cwd)", text: "\(gray)\(projectPath)\(reset)"))
 }
 
-print(lines.joined(separator: "\n"))
+// MARK: - Output
+
+var output: [String] = mainParts
+if !bottomParts.isEmpty {
+    output.append(bottomParts.joined(separator: " \(gray)@\(reset) "))
+}
+print(output.joined(separator: " \(gray)|\(reset) "))
