@@ -10,7 +10,7 @@ context: fork
 
 Antigravity CLI（バイナリ名 `agy`）を使って、別のAIエージェントの視点を得る。Google が 2026-05-19 に公開した Gemini CLI の後継。
 
-> **背景**: Gemini CLI は 2026-06-18 に Free/Pro/Ultra ユーザー向けで停止される予定（Standard/Enterprise ライセンスは継続）。本スキルはその後継。`agy` がインストール済みなら本スキルを常に優先する。旧 `/clasp-gemini` は `agy` 未インストール時のみ利用するフォールバック（〜2026-06-18 まで動作）。
+> **背景**: Gemini CLI は 2026-06-18 に Free/Pro/Ultra ユーザー向けで停止された（Standard/Enterprise ライセンスは継続）。本スキルはその後継として運用する。
 
 ## 前提条件
 
@@ -43,9 +43,7 @@ agy plugin import gemini
 which agy
 ```
 
-`agy` が見つからない場合は、まず `which gemini` で旧 CLI が残っているか確認する。Gemini CLI が利用可能なら `/clasp-gemini` スキルへフォールバックする旨をユーザーに伝えて終了する。両方とも見つからない場合は、上記インストール手順を案内した上で、緊急時は Claude `opus` モデルのサブエージェント（Task ツールで `model: "opus"`）への切替も選択肢として提示して終了する。
-
-> **循環呼び出し防止**: 本スキルが `/clasp-gemini` の Step 0 からの自動委譲で起動された場合（`$ARGUMENTS` の冒頭や呼び出し経路から判別可能なら）、`agy` 未検出時に `/clasp-gemini` への再フォールバックは **行わない**。直接 Claude `opus` 代替の案内に進むか終了すること。両者の間で無限ループに陥るのを防ぐため。
+`agy` が見つからない場合は、上記インストール手順を案内した上で、緊急時は Claude `opus` モデルのサブエージェント（Task ツールで `model: "opus"`）への切替も選択肢として提示して終了する。
 
 ### Step 2: 引数を確認
 
@@ -126,9 +124,4 @@ agy --add-dir /path/to/other-repo -p "両リポを横断してインターフェ
 
 ## フォールバック
 
-`agy` が利用できない場合のフォールバック優先順位:
-
-1. **`agy` 未インストール時のみ** `gemini` 利用可なら `/clasp-gemini` スキルにフォールバック（〜2026-06-18 まで。それ以降は Gemini CLI のリクエスト受付停止）
-2. `agy` も `gemini` も利用できない場合は、Claude `opus` モデルのサブエージェント（Task ツールで `model: "opus"`）に調査・分析を依頼
-
-`agy` がインストール済みなら、Gemini CLI の有無に関わらず常に Antigravity CLI を優先する。「フォールバック」は `agy` 不在時のみ発動する点に注意。
+`agy` が利用できない場合は、Claude `opus` モデルのサブエージェント（Task ツールで `model: "opus"`）に調査・分析を依頼する。
