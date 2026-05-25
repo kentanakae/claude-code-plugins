@@ -23,19 +23,16 @@ Bash ツールで以下を実行し、各CLIツールのインストール状況
 ```bash
 which codex && echo "codex: OK" || echo "codex: NOT FOUND"
 which agy && echo "agy (Antigravity): OK" || echo "agy (Antigravity): NOT FOUND"
-which gemini && echo "gemini (legacy, ~2026-06-18 まで): OK" || echo "gemini: NOT FOUND"
 ```
 
-調査担当エージェントが利用する CLI は **Antigravity CLI（`agy`）を優先**し、未インストール時のみ旧 Gemini CLI（`gemini`）にフォールバックする。Gemini CLI は 2026-06-18 で Free/Pro/Ultra ユーザー向けに停止予定。
+調査担当エージェントが利用する CLI は **Antigravity CLI（`agy`）**。
 
 未インストールのツールがある場合、そのツールを使うスキルの代わりに、Claude Codeのモデル違いで代替する:
 
 | 未インストール | フォールバック | エージェントへの指示変更 |
 |---|---|---|
 | Codex CLI | Claude `sonnet` モデル | `/clasp-codex` の代わりに Task ツール（`model: "sonnet"`）で実装の協働を依頼 |
-| 調査系 CLI（`agy` / `gemini`） | 両方未インストール時は Claude `opus` モデル | `/clasp-antigravity`（agy 不在時のみ `/clasp-gemini`）の代わりに Task ツール（`model: "opus"`）で調査の協働を依頼 |
-
-> 注: `agy` がインストール済みなら `gemini` の有無に関わらず常に `/clasp-antigravity` を使う。`/clasp-gemini` を呼んだ場合も内部の Step 0 で `agy` を再検出して `/clasp-antigravity` へ自動委譲されるため、ここでは「両方不在」時のフォールバックのみ記載。
+| Antigravity CLI（`agy`） | Claude `opus` モデル | `/clasp-antigravity` の代わりに Task ツール（`model: "opus"`）で調査の協働を依頼 |
 
 チェック結果はユーザーに報告し、Step 1 以降のエージェントプロンプトに反映すること。
 
@@ -57,10 +54,10 @@ $ARGUMENTS でタスクの説明が指定されている場合はそれを使用
 |------|------|---------|-----------|
 | 設計リード | lead（自分） | タスク分解・進捗管理・統合・Git・MCP | — |
 | 実装担当 | implementer | コード実装・修正・リファクタリング・定型コード生成 | `/clasp-codex` |
-| 調査担当 | researcher | 最新情報調査・大規模分析・リサーチ・設計方針策定 | `/clasp-antigravity`（フォールバック: `/clasp-gemini`） |
+| 調査担当 | researcher | 最新情報調査・大規模分析・リサーチ・設計方針策定 | `/clasp-antigravity` |
 | 検証担当 | tester | テスト作成・実行・QA・品質保証 | `/clasp-codex` |
-| レビュー担当 | reviewer | コードレビュー・品質検証・セキュリティチェック（脆弱性・シークレット漏洩・依存パッケージ含む） | `/clasp-codex` `/clasp-antigravity`（フォールバック: `/clasp-gemini`） |
-| ドキュメント担当 | documenter | README・APIドキュメント・設計ドキュメント・変更履歴・ユーザーガイド | `/clasp-codex` `/clasp-antigravity`（フォールバック: `/clasp-gemini`） |
+| レビュー担当 | reviewer | コードレビュー・品質検証・セキュリティチェック（脆弱性・シークレット漏洩・依存パッケージ含む） | `/clasp-codex` `/clasp-antigravity` |
+| ドキュメント担当 | documenter | README・APIドキュメント・設計ドキュメント・変更履歴・ユーザーガイド | `/clasp-codex` `/clasp-antigravity` |
 
 - **lead は常に固定**（自分が担当）
 - 他の役割は **タスクに応じて必要なものだけ** スポーンする
@@ -125,7 +122,7 @@ implementer 固有の協働原則:
 
 researcher 固有の協働原則:
 ```
-原則: 調査・分析は `/clasp-antigravity`（フォールバック: `/clasp-gemini`） スキルを使って Antigravity（または Gemini）と協働するのが基本。
+原則: 調査・分析は `/clasp-antigravity` スキルを使って Antigravityと協働するのが基本。
 自分がリードするのは、調査方針の決定・協働先 CLI への指示作成・結果の整理と共有。
 簡易タスク閾値内（単一の事実確認・参照等）は直接実行可。
 ```
@@ -168,7 +165,7 @@ tester 固有の協働原則:
 
 reviewer 固有の協働原則:
 ```
-原則: コード品質レビューは `/clasp-codex` スキルを使って Codex と、設計・セキュリティレビューは `/clasp-antigravity`（フォールバック: `/clasp-gemini`） スキルを使って Antigravity（または Gemini）と協働するのが基本。
+原則: コード品質レビューは `/clasp-codex` スキルを使って Codex と、設計・セキュリティレビューは `/clasp-antigravity` スキルを使って Antigravityと協働するのが基本。
 自分がリードするのは、レビュー観点の整理・協働先への指示作成・結果の統合と報告。
 セキュリティチェックでは以下を必ず確認する:
   - OWASP Top 10 に該当するコードレベルの脆弱性
@@ -192,7 +189,7 @@ reviewer 固有の協働原則:
 
 documenter 固有の協働原則:
 ```
-原則: ドキュメント執筆は `/clasp-codex` スキルを使って Codex と、対象の調査・分析は `/clasp-antigravity`（フォールバック: `/clasp-gemini`） スキルを使って Antigravity（または Gemini）と協働するのが基本。
+原則: ドキュメント執筆は `/clasp-codex` スキルを使って Codex と、対象の調査・分析は `/clasp-antigravity` スキルを使って Antigravityと協働するのが基本。
 自分がリードするのは、ドキュメント方針の決定・構成の設計・協働先への指示作成・結果の確認。
 簡易タスク閾値内（数行の明確な修正等）は直接実行可。
 ```
@@ -209,7 +206,7 @@ documenter 固有の協働原則:
 1. タスクの内容を確認する
 2. 自分の「協働原則」に基づき、協働先を決定する
 3. 協働する場合:
-   a. `/clasp-codex` または `/clasp-antigravity`（フォールバック: `/clasp-gemini`） スキルを使って協働を開始する
+   a. `/clasp-codex` または `/clasp-antigravity` スキルを使って協働を開始する
    b. 指示には「結果はファイルに書き出さず、標準出力（レスポンス）で返すこと」を含める
    c. 結果を受け取り、内容を検証する（チェックポイント）
    d. 必要に応じて SendMessage で他メンバーに共有する
