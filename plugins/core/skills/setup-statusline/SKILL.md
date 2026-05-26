@@ -166,18 +166,18 @@ Bash で以下を実行する（存在しない場合はスキップ）:
 
 対象の設定ファイルを Read で読み込み、`statusLine.command` の値からフラグ部分を解析する。
 
-| 項目 | ON フラグ | OFF フラグ |
-|------|-----------|------------|
-| プロジェクトパス | --show-project | --no-project |
-| モデル名 | --show-model | --no-model |
-| Git ブランチ | --show-branch | --no-branch |
-| Dirty mark | --show-dirty | --no-dirty |
-| コンテキストバー（█░の描画） | --show-bar | --no-bar |
-| トークン使用量 | --show-usage | --no-usage |
-| コスト | --show-cost | --no-cost |
-| レート制限バー（█░の描画） | --show-rate | --no-rate |
+| 項目 | ON フラグ | OFF フラグ | デフォルト |
+|------|-----------|------------|------------|
+| プロジェクトパス | --show-project | --no-project | ON |
+| モデル名 | --show-model | --no-model | ON |
+| Git ブランチ | --show-branch | --no-branch | ON |
+| Dirty mark | --show-dirty | --no-dirty | ON |
+| コンテキストバー（█░の描画） | --show-bar | --no-bar | ON |
+| トークン使用量 | --show-usage | --no-usage | OFF |
+| コスト | --show-cost | --no-cost | OFF |
+| レート制限バー（█░の描画） | --show-rate | --no-rate | ON |
 
-フラグが明示されていない項目は OFF とみなす。
+フラグが明示されていない項目はデフォルト値とみなす。
 
 コンテキストバーが ON の場合、以下の値フラグも解析する:
 
