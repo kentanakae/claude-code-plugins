@@ -40,8 +40,7 @@ allowed-tools: Read, Write, Edit, Bash
 {
   "statusLine": {
     "type": "command",
-    "command": "<コピー先パス> <flags>",
-    "padding": 0
+    "command": "<コピー先パス> <flags>"
   }
 }
 ```
@@ -77,12 +76,14 @@ AskUserQuestion（multiSelect: true）で表示項目を選択させる。AskUse
 
 | 項目 | ON フラグ | OFF フラグ |
 |------|-----------|------------|
-| コンテキストバー | --show-bar | --no-bar |
+| コンテキストバー（█░の描画） | --show-bar | --no-bar |
 | トークン使用量 | --show-usage | --no-usage |
 | コスト | --show-cost | --no-cost |
-| レート制限 | --show-rate | --no-rate |
+| レート制限バー（█░の描画） | --show-rate | --no-rate |
 
 全ての項目を未選択の状態で提示する。ユーザーが選択した項目に ON フラグを、選択しなかった項目に OFF フラグを付与する。
+
+> **注:** `--show-bar` / `--show-rate` はバー（█░）の**描画**のみを制御する。OFF にしても、コンテキストの使用率（`50%`）やレート制限のラベル・リセット時刻・残り（`5h[12:34] 30%`）テキストは表示される。
 
 #### コンテキストバーの詳細設定
 
@@ -171,10 +172,10 @@ Bash で以下を実行する（存在しない場合はスキップ）:
 | モデル名 | --show-model | --no-model |
 | Git ブランチ | --show-branch | --no-branch |
 | Dirty mark | --show-dirty | --no-dirty |
-| コンテキストバー | --show-bar | --no-bar |
+| コンテキストバー（█░の描画） | --show-bar | --no-bar |
 | トークン使用量 | --show-usage | --no-usage |
 | コスト | --show-cost | --no-cost |
-| レート制限 | --show-rate | --no-rate |
+| レート制限バー（█░の描画） | --show-rate | --no-rate |
 
 フラグが明示されていない項目は OFF とみなす。
 

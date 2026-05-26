@@ -73,8 +73,8 @@ while argIndex < args.count {
               --show-dirty / --no-dirty         Show dirty mark (default: on)
               --show-usage / --no-usage         Show token usage (default: off)
               --show-cost / --no-cost           Show session cost (default: off)
-              --show-bar / --no-bar             Show context bar (default: on)
-              --show-rate / --no-rate           Show rate limit (default: on)
+              --show-bar / --no-bar             Show context bar graphic (default: on). Percent text is always shown.
+              --show-rate / --no-rate           Show rate limit bar graphic (default: on). Label/time/percent text is always shown.
 
             Options (value):
               --bar-length <n>                  Context bar length (default: 10)
@@ -220,16 +220,20 @@ let usageTokens: Int? = input.contextWindow?.currentUsage.map { u in
         + (u.outputTokens ?? 0)
 }
 
-if showBar {
+if limit > 0 {
     let usage = min(usageTokens ?? 0, limit)
-    let ratio = limit > 0 ? Double(usage) / Double(limit) : 0
+    let ratio = Double(usage) / Double(limit)
     let percent = Int(ratio * 100)
     let barColor = colorForPercent(percent)
-    let bar = barColor + renderBar(length: barLength, ratio: ratio) + reset
-    mainParts.append("\(bar) \(barColor)\(percent)%\(reset)")
+    if showBar {
+        let bar = barColor + renderBar(length: barLength, ratio: ratio) + reset
+        mainParts.append("\(bar) \(barColor)\(percent)%\(reset)")
+    } else {
+        mainParts.append("\(barColor)\(percent)%\(reset)")
+    }
 }
 
-if showRate, let rateLimits = input.rateLimits {
+if let rateLimits = input.rateLimits {
     let entries: [(String, RateLimitWindow?)] = [("5h", rateLimits.fiveHour), ("7d", rateLimits.sevenDay)]
     let rateParts: [String] = entries.map { label, entry in
         guard let pct = entry?.usedPercentage else {
@@ -237,10 +241,14 @@ if showRate, let rateLimits = input.rateLimits {
         }
         let clampedPct = min(max(pct, 0), 100)
         let ratio = Double(clampedPct) / 100.0
-        let bar = renderBar(length: rateBarLength, ratio: ratio)
         let color = colorForPercent(clampedPct)
         let prefix = entry?.resetsAt.map { "\(label)[\(formatResetTime($0))]" } ?? label
-        return "\(color)\(prefix):\(bar) \(clampedPct)%\(reset)"
+        if showRate {
+            let bar = renderBar(length: rateBarLength, ratio: ratio)
+            return "\(color)\(prefix):\(bar) \(clampedPct)%\(reset)"
+        } else {
+            return "\(color)\(prefix) \(clampedPct)%\(reset)"
+        }
     }
     mainParts.append(rateParts.joined(separator: " \(gray)|\(reset) "))
 }
